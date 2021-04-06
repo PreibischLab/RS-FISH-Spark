@@ -1,7 +1,7 @@
 package net.preibisch.rsfish.spark;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Callable;
 
 import org.apache.spark.SparkConf;
@@ -13,7 +13,7 @@ import org.janelia.saalfeldlab.n5.N5FSReader;
 import org.janelia.saalfeldlab.n5.N5Reader;
 import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 
-import compute.RadialSymmetry.Ransac;
+import benchmark.TextFileAccess;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -198,6 +198,14 @@ public class DistributedProcessing implements Callable<Void>
 
 		final String imageName = image;
 		final String datasetName = dataset;
+		final long[] min = minInterval.clone();
+		final long[] max = maxInterval.clone();
+
+		// do not store local results
+		params.resultsFilePath = "";
+
+		// single-threaded within each block
+		params.numThreads = 1;
 
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
@@ -210,6 +218,7 @@ public class DistributedProcessing implements Callable<Void>
 			HelperFunctions.headless = true;
 			ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
 					(RandomAccessible)(Object)Views.extendMirrorSingle( img ),
+					new FinalInterval(min, max),
 					block.createInterval(),
 					params );
 
@@ -235,6 +244,8 @@ public class DistributedProcessing implements Callable<Void>
 
 		System.out.println( "total points: " + allPoints.size() );
 
+		writeCSV( allPoints, output );
+
 		return null;
 	}
 
@@ -252,6 +263,28 @@ public class DistributedProcessing implements Callable<Void>
 			return false;
 		}
 		return true;
+	}
+
+	public static void writeCSV( final ArrayList<double[]> points, final String file )
+	{
+		PrintWriter out = TextFileAccess.openFileWrite( file );
+
+		if ( points.get( 0 ).length == 4 )
+			out.println("x,y,z,t,c,intensity");
+		else
+			out.println("x,y,t,c,intensity");
+
+		for (double[] spot : points) {
+			for (int d = 0; d < spot.length - 1; ++d)
+				out.print( String.format(java.util.Locale.US, "%.4f", spot[ d ] ) + "," );
+
+			out.print( "1,1," );
+
+			out.println(String.format(java.util.Locale.US, "%.4f", spot[ spot.length - 1 ] ) );
+		}
+
+		System.out.println(points.size() + " spots written to " + file );
+		out.close();
 	}
 
 	// taken from: hot-knife repository (Saalfeld)
