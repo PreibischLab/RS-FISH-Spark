@@ -190,7 +190,7 @@ public class SparkRSFISH implements Callable<Void>
 		params.resultsFilePath = output;
 
 		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
-		sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
+		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
