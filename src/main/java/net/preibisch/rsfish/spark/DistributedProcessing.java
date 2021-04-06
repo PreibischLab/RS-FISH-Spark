@@ -18,6 +18,7 @@ import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
 import net.imglib2.Interval;
+import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
@@ -153,7 +154,7 @@ public class DistributedProcessing implements Callable<Void>
 		// general
 		params.anisotropyCoefficient = anisotropy;
 		params.useAnisotropyForDoG = true;
-		params.RANSAC = Ransac.values()[ ransac ]; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
+		params.ransacSelection = ransac; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
 
 		if ( minIntensity == maxIntensity )
 		{
@@ -189,21 +190,30 @@ public class DistributedProcessing implements Callable<Void>
 		params.resultsFilePath = output;
 
 		final SparkConf sparkConf = new SparkConf().setAppName(DistributedProcessing.class.getSimpleName());
+		sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
+		final ArrayList< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
+
+		final String imageName = image;
+		final String datasetName = dataset;
 
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
 
-			final RandomAccessibleInterval img = N5Utils.open( n5, dataset );
+			System.out.println( "Processing block " + block.id() );
+
+			final N5Reader n5Local = new N5FSReader( imageName );
+			final RandomAccessibleInterval img = N5Utils.open( n5Local, datasetName );
 
 			HelperFunctions.headless = true;
 			ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
-					Views.extendMirrorSingle( img ),
-					new FinalInterval( img ),
+					(RandomAccessible)(Object)Views.extendMirrorSingle( img ),
+					block.createInterval(),
 					params );
+
+			System.out.println( "block " + block.id() + " found " + points.size() + " spots.");
 
 			return new Tuple2<>(block, points );
 		});
@@ -218,7 +228,10 @@ public class DistributedProcessing implements Callable<Void>
 		final ArrayList<double[]> allPoints = new ArrayList<>();
 
 		for ( final Tuple2<Block, ArrayList<double[]>> r : results )
-			allPoints.addAll( r._2() );
+		{
+			if ( r != null && r._2() != null )
+				allPoints.addAll( r._2() );
+		}
 
 		System.out.println( "total points: " + allPoints.size() );
 

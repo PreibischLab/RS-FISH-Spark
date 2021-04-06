@@ -14,16 +14,22 @@ public class Block implements Serializable
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = 1L;
-	final long[] min, max;
+	private static final long serialVersionUID = 9068252106055534926L;
 
-	public Block( final long[] min, final long[] max )
+	final long[] min, max;
+	final int id;
+
+	public Block( final int id, final long[] min, final long[] max )
 	{
 		this.min = min;
 		this.max = max;
+		this.id = id;
 	}
 
-	public FinalInterval getInterval()
+	public long[] min() { return min; }
+	public long[] max() { return max; }
+	public int id() { return id; }
+	public FinalInterval createInterval()
 	{
 		return new FinalInterval( min, max );
 	}
@@ -61,6 +67,7 @@ public class Block implements Serializable
 
 		final ArrayList< Block > blocks = new ArrayList<>();
 		final LocalizingZeroMinIntervalIterator cursor = new LocalizingZeroMinIntervalIterator( numBlocks );
+		int id = 0;
 
 		while ( cursor.hasNext() )
 		{
@@ -75,7 +82,7 @@ public class Block implements Serializable
 				max[ d ] = maxs.get( d ).get( cursor.getIntPosition( d ) );
 			}
 
-			blocks.add( new Block(min, max) );
+			blocks.add( new Block(id++, min, max) );
 		}
 
 		return blocks;
@@ -86,6 +93,6 @@ public class Block implements Serializable
 		ArrayList< Block > blocks = splitIntoBlocks( new FinalInterval( new long[] { 19, -5 }, new long[] { 1000, 100 } ), new int[] { 100, 100 } );
 
 		for ( final Block b : blocks )
-			System.out.println( Util.printInterval( b.getInterval() ) );
+			System.out.println( Util.printInterval( b.createInterval() ) );
 	}
 }
