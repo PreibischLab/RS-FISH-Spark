@@ -27,7 +27,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
-public class DistributedProcessing implements Callable<Void>
+public class SparkRSFISH implements Callable<Void>
 {
 	// input file
 	@Option(names = {"-i", "--image"}, required = true, description = "N5 container path, e.g. -i /home/smFish.n5")
@@ -189,7 +189,7 @@ public class DistributedProcessing implements Callable<Void>
 		params.bsInlierRatio = (float)backgroundMinInlierRatio;
 		params.resultsFilePath = output;
 
-		final SparkConf sparkConf = new SparkConf().setAppName(DistributedProcessing.class.getSimpleName());
+		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
 		sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
@@ -304,6 +304,6 @@ public class DistributedProcessing implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
-		new CommandLine( new DistributedProcessing() ).execute( args );
+		new CommandLine( new SparkRSFISH() ).execute( args );
 	}
 }
