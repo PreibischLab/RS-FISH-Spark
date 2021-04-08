@@ -1,6 +1,9 @@
-package net.preibisch.rsfish.spark;
+package net.preibisch.rsfish.spark.aws;
 
 import benchmark.TextFileAccess;
+import com.amazonaws.regions.Regions;
+import com.bigdistributor.aws.dataexchange.aws.s3.func.auth.AWSCredentialInstance;
+import com.bigdistributor.aws.dataexchange.aws.s3.func.bucket.S3BucketInstance;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -9,27 +12,29 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
+import net.preibisch.rsfish.spark.Block;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.janelia.saalfeldlab.n5.DatasetAttributes;
-import org.janelia.saalfeldlab.n5.N5FSReader;
 import org.janelia.saalfeldlab.n5.N5Reader;
 import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
+import org.janelia.saalfeldlab.n5.s3.N5AmazonS3Reader;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
+import java.io.File;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 
-public class SparkRSFISH implements Callable<Void>
+public class AWSSparkRSFISH implements Callable<Void>
 {
 	// input file
-	@Option(names = {"-i", "--image"}, required = true, description = "N5 container path, e.g. -i /home/smFish.n5")
+	@Option(names = {"-i", "--image"}, required = true, description = "N5 container path, e.g. -i smFish.n5")
 	private String image = null;
 
 	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5, e.g. -d 'embryo_5_ch0/c0/s0'")
@@ -106,10 +111,28 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = {"-rn2", "--ransacNTimesStDev2"}, required = false, description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
 	private double ransacNTimesStDev2 = 6.0;
 
+
+	@Option(names = {"-pk", "--publicKey"}, required = true, description = "Credential public key")
+	String credPublicKey;
+
+	@Option(names = {"-pp", "--privateKey"}, required = true, description = "Credential private key")
+	String credPrivateKey;
+
+	@Option(names = {"-b", "--bucket"}, required = true, description = "The name of bucket")
+	String bucketName;
+
+	@Option(names = {"-p", "--path"}, required = false, description = "The path of the input Data inside bucket")
+	String path = "";
+
 	@Override
 	public Void call() throws Exception
 	{
-		final N5Reader n5 = new N5FSReader( image );
+
+		AWSCredentialInstance.initWithKey(credPublicKey,credPrivateKey);
+
+		S3BucketInstance.init(AWSCredentialInstance.get(), Regions.EU_CENTRAL_1, bucketName,path);
+
+		final N5Reader n5 = new N5AmazonS3Reader(S3BucketInstance.get().getS3(), bucketName, image);
 		final DatasetAttributes att = n5.getDatasetAttributes( dataset );
 		final long[] dimensions = att.getDimensions();
 
@@ -188,12 +211,12 @@ public class SparkRSFISH implements Callable<Void>
 		params.bsInlierRatio = (float)backgroundMinInlierRatio;
 		params.resultsFilePath = output;
 
-		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
+		final SparkConf sparkConf = new SparkConf().setAppName(AWSSparkRSFISH.class.getSimpleName());
 		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-		final ArrayList< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
+		final ArrayList<Block> blocks = Block.splitIntoBlocks( interval, blockSize );
 
 		final String imageName = image;
 		final String datasetName = dataset;
@@ -210,9 +233,10 @@ public class SparkRSFISH implements Callable<Void>
 		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
 
 			System.out.println( "Processing block " + block.id() );
-			// change to both
-			final N5Reader n5Local = new N5FSReader( imageName );
-			final RandomAccessibleInterval img = N5Utils.open( n5Local, datasetName );
+			// AWS reader
+			N5Reader n5reader = new N5AmazonS3Reader(S3BucketInstance.get().getS3(), bucketName, image);
+//			final N5Reader n5Local = new N5FSReader( imageName );
+			final RandomAccessibleInterval img = N5Utils.open( n5reader, datasetName );
 
 			HelperFunctions.headless = true;
 			ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
@@ -244,7 +268,10 @@ public class SparkRSFISH implements Callable<Void>
 		System.out.println( "total points: " + allPoints.size() );
 
 		writeCSV( allPoints, output );
-		//save to s3
+		//save output to s3
+
+		S3BucketInstance.get().uploadFile(new File(output));
+
 		
 
 		return null;
@@ -305,6 +332,6 @@ public class SparkRSFISH implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
-		new CommandLine( new SparkRSFISH() ).execute( args );
+		new CommandLine( new AWSSparkRSFISH() ).execute( args );
 	}
 }
