@@ -110,6 +110,16 @@
 			<version>2.3.1-SNAPSHOT</version>
 		</dependency>
 		<dependency>
+			<groupId>com.bigdistributor</groupId>
+			<artifactId>AWS_DataExchange</artifactId>
+			<version>0.3-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>org.janelia.saalfeldlab</groupId>
+			<artifactId>n5-aws-s3</artifactId>
+			<version>3.2.0</version>
+		</dependency>
+		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
 		</dependency>
