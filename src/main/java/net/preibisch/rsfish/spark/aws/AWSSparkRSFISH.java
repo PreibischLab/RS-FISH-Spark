@@ -131,8 +131,9 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
         final AWSN5Supplier n5Supplier = new AWSN5Supplier(bucketName, image, credPublicKey, credPrivateKey);
 
-        System.out.println("Bucket: " + bucketName);
-        System.out.println("Image: " + image);
+        if(!n5Supplier.exists()){
+            throw new Exception("Input image not found ! image: "+image +" Bucket: "+bucketName);
+        }
         final N5Reader n5 = n5Supplier.getN5();
         final DatasetAttributes att = n5.getDatasetAttributes(dataset);
         final long[] dimensions = att.getDimensions();
@@ -327,6 +328,5 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
     public static final void main(final String... args) {
         new CommandLine(new AWSSparkRSFISH()).execute(args);
-        System.exit(0);
     }
 }

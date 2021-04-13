@@ -18,7 +18,7 @@ public class AWSN5Supplier implements Serializable {
     private final String credPrivateKey;
     private final String file;
 
-    public AWSN5Supplier( String bucketName, String file, String credPublicKey, String credPrivateKey) {
+    public AWSN5Supplier(String bucketName, String file, String credPublicKey, String credPrivateKey) {
         this.credPublicKey = credPublicKey;
         this.credPrivateKey = credPrivateKey;
         this.bucketName = bucketName;
@@ -37,7 +37,12 @@ public class AWSN5Supplier implements Serializable {
     }
 
     public N5Reader getN5() throws IOException {
-        return new N5AmazonS3Reader(getS3(), bucketName, file);
+        AmazonS3 s3 = getS3();
+        System.out.println("Got S3: " + s3.getRegionName());
+        return new N5AmazonS3Reader(s3, bucketName, file);
     }
 
+    public boolean exists() {
+        return getS3().doesObjectExist(bucketName, file);
+    }
 }
