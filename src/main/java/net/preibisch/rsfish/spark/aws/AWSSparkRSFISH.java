@@ -1,9 +1,8 @@
 package net.preibisch.rsfish.spark.aws;
 
 import benchmark.TextFileAccess;
-import com.amazonaws.regions.Regions;
-import com.bigdistributor.aws.dataexchange.aws.s3.func.auth.AWSCredentialInstance;
-import com.bigdistributor.aws.dataexchange.aws.s3.func.bucket.S3BucketInstance;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3URI;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -13,6 +12,8 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 import net.preibisch.rsfish.spark.Block;
+import net.preibisch.rsfish.spark.aws.tools.AWSN5Supplier;
+import net.preibisch.rsfish.spark.aws.tools.FileUploader;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -32,14 +33,14 @@ import java.util.concurrent.Callable;
 
 public class AWSSparkRSFISH implements Callable<Void> {
     // input file
-    @Option(names = {"-i", "--image"}, required = true, description = "N5 container path, e.g. -i smFish.n5")
+    @Option(names = {"-i", "--image"}, required = true, description = "N5 container path in s3, e.g. -i s3://bucket-name/smFish.n5")
     private String image = null;
 
     @Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5, e.g. -d 'embryo_5_ch0/c0/s0'")
     private String dataset = null;
 
     // output file
-    @Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
+    @Option(names = {"-o", "--output"}, required = true, description = "output CSV file in S3, e.g. -o 's3://rs-fish/embryo_5_ch0.csv'")
     private String output = null;
 
     // processing options
@@ -116,8 +117,8 @@ public class AWSSparkRSFISH implements Callable<Void> {
     @Option(names = {"-pp", "--privateKey"}, required = true, description = "Credential private key")
     String credPrivateKey;
 
-    @Option(names = {"-b", "--bucket"}, required = true, description = "The name of bucket")
-    String bucketName;
+//    @Option(names = {"-b", "--bucket"}, required = true, description = "The name of bucket")
+//    String bucketName;
 
     @Option(names = {"-p", "--path"}, required = false, description = "The path of the input Data inside bucket")
     String path = "";
@@ -125,14 +126,14 @@ public class AWSSparkRSFISH implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
-        AWSCredentialInstance.initWithKey(credPublicKey, credPrivateKey);
+//        AWSCredentialInstance.initWithKey(credPublicKey, credPrivateKey);
+//
+//        S3BucketInstance.init(AWSCredentialInstance.get(), Regions.EU_CENTRAL_1, bucketName, path);
 
-        S3BucketInstance.init(AWSCredentialInstance.get(), Regions.EU_CENTRAL_1, bucketName, path);
+        final AWSN5Supplier n5Supplier = new AWSN5Supplier(image, credPublicKey, credPrivateKey);
 
-        final AWSN5Supplier n5Supplier = new AWSN5Supplier(bucketName, image, credPublicKey, credPrivateKey);
-
-        if(!n5Supplier.exists()){
-            throw new Exception("Input image not found ! image: "+image +" Bucket: "+bucketName);
+        if (!n5Supplier.exists()) {
+            throw new Exception("Input image not found ! image: " + image);
         }
         final N5Reader n5 = n5Supplier.getN5();
         final DatasetAttributes att = n5.getDatasetAttributes(dataset);
@@ -264,13 +265,17 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
         System.out.println("total points: " + allPoints.size());
 
-        writeCSV(allPoints, output);
-        //save output to s3
-
-        S3BucketInstance.get().uploadFile(new File(output));
-
+        save(n5Supplier.getS3(), allPoints, output);
 
         return null;
+    }
+
+    private void save(AmazonS3 s3, ArrayList<double[]> allPoints, String output) throws InterruptedException {
+        AmazonS3URI s3uri = new AmazonS3URI(output);
+        String localFile = new File(s3uri.getKey()).getAbsolutePath();
+        writeCSV(allPoints, localFile);
+        //save output to s3
+        FileUploader.uploadFile(s3, new File(output), s3uri);
     }
 
     // taken from: hot-knife repository (Saalfeld)
