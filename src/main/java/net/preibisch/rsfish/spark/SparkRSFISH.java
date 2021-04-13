@@ -1,18 +1,5 @@
 package net.preibisch.rsfish.spark;
 
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.concurrent.Callable;
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.janelia.saalfeldlab.n5.DatasetAttributes;
-import org.janelia.saalfeldlab.n5.N5FSReader;
-import org.janelia.saalfeldlab.n5.N5Reader;
-import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
-
 import benchmark.TextFileAccess;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
@@ -22,10 +9,22 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.janelia.saalfeldlab.n5.DatasetAttributes;
+import org.janelia.saalfeldlab.n5.N5FSReader;
+import org.janelia.saalfeldlab.n5.N5Reader;
+import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
+
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
 
 public class SparkRSFISH implements Callable<Void>
 {
@@ -189,7 +188,7 @@ public class SparkRSFISH implements Callable<Void>
 		params.bsInlierRatio = (float)backgroundMinInlierRatio;
 		params.resultsFilePath = output;
 
-		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
+		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName()).setMaster("local");
 		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
@@ -304,6 +303,7 @@ public class SparkRSFISH implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
+		System.out.println(String.join(" ",args));
 		new CommandLine( new SparkRSFISH() ).execute( args );
 	}
 }
