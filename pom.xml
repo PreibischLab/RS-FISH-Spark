@@ -110,9 +110,9 @@
             <version>2.3.1-SNAPSHOT</version>
         </dependency>
         <dependency>
-            <groupId>com.bigdistributor</groupId>
-            <artifactId>AWS_DataExchange</artifactId>
-            <version>0.3-SNAPSHOT</version>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-s3</artifactId>
+            <version>${aws-java-sdk-s3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
