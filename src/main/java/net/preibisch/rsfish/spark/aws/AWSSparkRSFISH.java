@@ -117,9 +117,6 @@ public class AWSSparkRSFISH implements Callable<Void> {
     @Option(names = {"-pp", "--privateKey"}, required = true, description = "Credential private key")
     String credPrivateKey;
 
-//    @Option(names = {"-b", "--bucket"}, required = true, description = "The name of bucket")
-//    String bucketName;
-
     @Option(names = {"-p", "--path"}, required = false, description = "The path of the input Data inside bucket")
     String path = "";
 
