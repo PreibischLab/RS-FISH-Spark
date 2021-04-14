@@ -123,10 +123,6 @@ public class AWSSparkRSFISH implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
-//        AWSCredentialInstance.initWithKey(credPublicKey, credPrivateKey);
-//
-//        S3BucketInstance.init(AWSCredentialInstance.get(), Regions.EU_CENTRAL_1, bucketName, path);
-
         final AWSN5Supplier n5Supplier = new AWSN5Supplier(image, credPublicKey, credPrivateKey);
 
         if (!n5Supplier.exists()) {
@@ -206,7 +202,7 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
 
         final SparkConf sparkConf = new SparkConf().setAppName(AWSSparkRSFISH.class.getSimpleName());
-        //sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
+
         final JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
         System.out.println("Version: " + sc.version());
