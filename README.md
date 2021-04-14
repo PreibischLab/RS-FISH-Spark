@@ -11,4 +11,5 @@ For **local execution** (comparable to efficient multi-threading), compile the r
 
 For **cluster execution** please contact your IT department for how to distribute Spark code on your local cluster. You will need to do create a **fatjar** using Maven first.
 
-For **cloud execution** ... @mzouink could you maybe give this a shot?
+For **cloud execution**, a fatjar version is already publicly available on: `s3://preibischlab-release-jars/RS-Fish-jar-with-dependencies.jar`
+or you can compile your own version and run it on AWS using EMR cluster, check [how-to-aws.md](how_to_aws.md) for more details.
