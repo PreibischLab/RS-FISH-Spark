@@ -188,7 +188,7 @@ public class SparkRSFISH implements Callable<Void>
 		params.bsInlierRatio = (float)backgroundMinInlierRatio;
 		params.resultsFilePath = output;
 
-		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName()).setMaster("local");
+		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
 		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
