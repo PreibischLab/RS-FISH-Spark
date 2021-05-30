@@ -1,8 +1,5 @@
 package net.preibisch.rsfish.spark.aws;
 
-import benchmark.TextFileAccess;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3URI;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -13,7 +10,7 @@ import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 import net.preibisch.rsfish.spark.Block;
 import net.preibisch.rsfish.spark.aws.tools.AWSN5Supplier;
-import net.preibisch.rsfish.spark.aws.tools.FileUploader;
+import net.preibisch.rsfish.spark.aws.tools.S3Utils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -26,8 +23,6 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
-import java.io.File;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 
@@ -258,18 +253,11 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
         System.out.println("total points: " + allPoints.size());
 
-        save(n5Supplier.getS3(), allPoints, output);
+        S3Utils.savePoints(n5Supplier.getS3(), allPoints, output);
 
         return null;
     }
 
-    private void save(AmazonS3 s3, ArrayList<double[]> allPoints, String output) throws InterruptedException {
-        AmazonS3URI s3uri = new AmazonS3URI(output);
-        String localFile = new File(s3uri.getKey()).getAbsolutePath();
-        writeCSV(allPoints, localFile);
-        //save output to s3
-        FileUploader.uploadFile(s3, new File(output), s3uri);
-    }
 
     // taken from: hot-knife repository (Saalfeld)
     protected static final boolean parseCSIntArray(final String csv, final int[] array) {
@@ -285,27 +273,6 @@ public class AWSSparkRSFISH implements Callable<Void> {
             return false;
         }
         return true;
-    }
-
-    public static void writeCSV(final ArrayList<double[]> points, final String file) {
-        PrintWriter out = TextFileAccess.openFileWrite(file);
-
-        if (points.get(0).length == 4)
-            out.println("x,y,z,t,c,intensity");
-        else
-            out.println("x,y,t,c,intensity");
-
-        for (double[] spot : points) {
-            for (int d = 0; d < spot.length - 1; ++d)
-                out.print(String.format(java.util.Locale.US, "%.4f", spot[d]) + ",");
-
-            out.print("1,1,");
-
-            out.println(String.format(java.util.Locale.US, "%.4f", spot[spot.length - 1]));
-        }
-
-        System.out.println(points.size() + " spots written to " + file);
-        out.close();
     }
 
     // taken from: hot-knife repository (Saalfeld)
