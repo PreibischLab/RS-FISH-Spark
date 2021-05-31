@@ -16,6 +16,7 @@ import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.google.common.io.CharStreams;
+import org.apache.commons.codec.binary.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,6 +32,7 @@ public class S3Utils {
         TransferManager tm = TransferManagerBuilder.standard().withS3Client(s3).build();
         Upload upload = tm.upload(s3uri.getBucket(), s3uri.getKey(), file);
         upload.waitForCompletion();
+        tm.shutdownNow(false);
         return true;
     }
 
@@ -43,6 +45,7 @@ public class S3Utils {
             System.out.println("Local file: " + localFile);
             Download upload = tm.download(amazonS3URI.getBucket(), amazonS3URI.getKey(), localFile);
             upload.waitForCompletion();
+            tm.shutdownNow(false);
             return localFile;
         } catch (Exception e) {
             e.printStackTrace();
@@ -61,8 +64,12 @@ public class S3Utils {
         try (Reader reader = new InputStreamReader(objectData)) {
             text = CharStreams.toString(reader);
         }
+//        System.out.println(text.replace("\n"," "));
         objectData.close();
-        return text;
+        byte[] bytes = StringUtils.getBytesUsAscii(text);
+
+        String utf8EncodedString = StringUtils.newStringUtf8(bytes);
+        return utf8EncodedString;
     }
 
     public static AmazonS3 initS3(String publicKey, String privateKey, String region) {
@@ -91,7 +98,12 @@ public class S3Utils {
         String localFile = new File(s3uri.getKey()).getAbsolutePath();
         CSVUtils.writeCSV(allPoints, localFile);
         //save output to s3
-        S3Utils.uploadFile(s3, new File(output), s3uri);
+        S3Utils.uploadFile(s3, new File(localFile), s3uri);
+    }
+
+    public static String getFileName(String uri){
+        return new File(new AmazonS3URI(uri).getKey()).getName();
+
     }
 
 

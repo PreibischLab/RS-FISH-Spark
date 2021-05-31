@@ -1,8 +1,10 @@
 package net.preibisch.rsfish.spark.aws;
 
 
+import benchmark.TextFileAccess;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3URI;
 import com.google.common.io.Files;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
@@ -12,6 +14,7 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.imageplus.ImagePlusImgs;
 import net.imglib2.view.Views;
+import net.preibisch.rsfish.spark.aws.tools.S3Supplier;
 import net.preibisch.rsfish.spark.aws.tools.S3Utils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
@@ -21,6 +24,8 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
+import java.io.File;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -91,14 +96,22 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
     @Option(names = {"-rn2", "--ransacNTimesStDev2"}, required = false, description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
     private double ransacNTimesStDev2 = 6.0;
 
-    @Option(names = {"-pk", "--publicKey"}, required = true, description = "Credential public key")
+    @Option(names = {"-pk", "--publicKey"}, required = false, description = "Credential public key")
     private String credPublicKey;
 
-    @Option(names = {"-pp", "--privateKey"}, required = true, description = "Credential private key")
+    @Option(names = {"-pp", "--privateKey"}, required = false, description = "Credential private key")
     private String credPrivateKey;
 
     @Option(names = {"-reg", "--region"}, required = false, description = "S3 region Exmpl: us-east-1")
     private String region = Regions.US_EAST_1.getName();
+
+    public AWSSparkRSFISH_IJ(String credPublicKey, String credPrivateKey, String region) {
+        this.credPublicKey = credPublicKey;
+        this.credPrivateKey = credPrivateKey;
+        this.region = region;
+    }
+
+    public AWSSparkRSFISH_IJ(){}
 
 
     @Override
@@ -141,13 +154,15 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
         final double ransacNTimesStDev1 = this.ransacNTimesStDev1;
         final double ransacNTimesStDev2 = this.ransacNTimesStDev2;
 
-        final SparkConf sparkConf = new SparkConf().setAppName(net.preibisch.rsfish.spark.SparkRSFISH_IJ.class.getSimpleName());
-        //sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
+        final SparkConf sparkConf = new SparkConf().setAppName(AWSSparkRSFISH_IJ.class.getSimpleName());
+//        sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
         final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
         final JavaRDD<Tuple2< String, String > > rddIds = sc.parallelize( toProcess );
 
         HelperFunctions.headless = true;
+
+        final S3Supplier s3Supplier = new S3Supplier(credPublicKey, credPrivateKey,region);
 
         rddIds.foreach( input -> {
 
@@ -192,15 +207,20 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
             params.bsMethod = background;
             params.bsMaxError = (float)backgroundMaxError;
             params.bsInlierRatio = (float)backgroundMinInlierRatio;
-            params.resultsFilePath = input._2();
+
 
             // single-threaded within each block
             params.numThreads = 1;
 
 
-            final AmazonS3 s3 = getS3();
-            String localPath = S3Utils.download(s3, Files.createTempDir(),input._1()).getAbsolutePath();
+            final AmazonS3 s3 = s3Supplier.getS3();
+            File tmpFoler = Files.createTempDir();
 
+            System.out.println("Tmp Folder :  "+tmpFoler.getAbsolutePath());
+            final String localPath = S3Utils.download(s3, tmpFoler,input._1()).getAbsolutePath();
+
+            final String localOutput = new File(tmpFoler,S3Utils.getFileName(input._2())).getAbsolutePath();
+            params.resultsFilePath = localOutput;
             final RandomAccessibleInterval img = ImagePlusImgs.from( new ImagePlus( localPath ) );
 
             final ArrayList<double[]> allPoints = Radial_Symmetry.runRSFISH(
@@ -212,7 +232,8 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
             System.out.println( "image " + input._1() + " found "  + allPoints.size() + " spots.");
 
 
-            S3Utils.savePoints(s3, allPoints, input._2());
+            S3Utils.uploadFile(s3,new File(localOutput),new AmazonS3URI(input._2()));
+//            S3Utils.savePoints(s3, allPoints, input._2());
 
         });
 
@@ -222,34 +243,24 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
         return null;
     }
 
-    private AmazonS3 getS3() {
-        return  S3Utils.initS3(credPublicKey,credPrivateKey,region);
-    }
 
     public static final void main(final String... args) {
-		/*
-		PrintWriter out = TextFileAccess.openFileWrite( "/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/cmdline.txt" );
 
-		out.println("-i0 4166.0\n" +
-				"-i1 46562.0\n" +
-				"-a 1.0");
-		for ( int i = 0; i < 10000; ++i )
-		{
-			out.println("-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'\n" +
-					"-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0_" + i + ".tif.csv'");
-		}
 
-		out.close();
+        PrintWriter out = TextFileAccess.openFileWrite( "/Users/Marwan/Desktop/cmdline_cluster.txt" );
 
-		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'
-		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif.csv'
-		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif'
-		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif.csv'
-		-i0 4166.0
-		-i1 46562.0
-		-a 1.0
-		*/
+        out.print("-i0 4166.0 " +
+                "-i1 46562.0 " +
+                "-a 1.0 ");
+        for ( int i = 0; i < 1000; ++i )
+        {
+            out.print("-i s3://rsfish/N2_352-1.tif " +
+                    "-o s3://rsfish/outputs/N2_352-1_" + i + ".csv ");
+        }
 
-        new CommandLine( new net.preibisch.rsfish.spark.SparkRSFISH_IJ() ).execute( args );
+        out.close();
+
+
+        new CommandLine( new AWSSparkRSFISH_IJ() ).execute( args );
     }
 }
