@@ -9,6 +9,7 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.transfer.Download;
@@ -93,6 +94,25 @@ public class S3Utils {
         }
     }
 
+    public static ArrayList<AmazonS3URI> getFilesList(AmazonS3 s3, AmazonS3URI uri, String ext) {
+        List<S3ObjectSummary> keyList = new ArrayList<S3ObjectSummary>();
+        ObjectListing objects = s3.listObjects(uri.getBucket());
+        keyList.addAll(objects.getObjectSummaries());
+        while (objects.isTruncated()) {
+            objects = s3.listNextBatchOfObjects(objects);
+            keyList.addAll(objects.getObjectSummaries());
+        }
+        ArrayList<AmazonS3URI> result = new ArrayList<AmazonS3URI>();
+        String baseUri = uri.toString().replace(uri.getKey(), "");
+        for (S3ObjectSummary os : keyList) {
+            if ((os.getKey().contains(uri.getKey())) && os.getKey().endsWith(ext)) {
+                AmazonS3URI currentUri = new AmazonS3URI(baseUri+os.getKey());
+                result.add(currentUri);
+            }
+        }
+        return result;
+    }
+
     public static void savePoints(AmazonS3 s3, ArrayList<double[]> allPoints, String output) throws InterruptedException {
         AmazonS3URI s3uri = new AmazonS3URI(output);
         String localFile = new File(s3uri.getKey()).getAbsolutePath();
@@ -101,7 +121,7 @@ public class S3Utils {
         S3Utils.uploadFile(s3, new File(localFile), s3uri);
     }
 
-    public static String getFileName(String uri){
+    public static String getFileName(String uri) {
         return new File(new AmazonS3URI(uri).getKey()).getName();
 
     }
