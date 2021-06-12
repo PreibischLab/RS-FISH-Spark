@@ -1,7 +1,6 @@
 package net.preibisch.rsfish.spark.aws;
 
 
-import benchmark.TextFileAccess;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
@@ -25,7 +24,6 @@ import picocli.CommandLine.Option;
 import scala.Tuple2;
 
 import java.io.File;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -231,8 +229,10 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
 
             System.out.println( "image " + input._1() + " found "  + allPoints.size() + " spots.");
 
-
-            S3Utils.uploadFile(s3,new File(localOutput),new AmazonS3URI(input._2()));
+            if(new File(localOutput).exists())
+                S3Utils.uploadFile(s3,new File(localOutput),new AmazonS3URI(input._2()));
+            else
+                System.out.println("Nothing to upload for "+new File(localPath).getName());
 //            S3Utils.savePoints(s3, allPoints, input._2());
 
         });
@@ -247,20 +247,18 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
     public static final void main(final String... args) {
 
 
-        PrintWriter out = TextFileAccess.openFileWrite( "/Users/Marwan/Desktop/cmdline_cluster.txt" );
-
-        out.print("-i0 4166.0 " +
-                "-i1 46562.0 " +
-                "-a 1.0 ");
-        for ( int i = 0; i < 1000; ++i )
-        {
-            out.print("-i s3://rsfish/N2_352-1.tif " +
-                    "-o s3://rsfish/outputs/N2_352-1_" + i + ".csv ");
-        }
-
-        out.close();
-
-
-        new CommandLine( new AWSSparkRSFISH_IJ() ).execute( args );
+//        PrintWriter out = TextFileAccess.openFileWrite( "/Users/Marwan/Desktop/cmdline_cluster.txt" );
+//
+//        out.print("-i0 4166.0 " +
+//                "-i1 46562.0 " +
+//                "-a 1.0 ");
+//        for ( int i = 0; i < 1000; ++i )
+//        {
+//            out.print("-i s3://rsfish/N2_352-1.tif " +
+//                    "-o s3://rsfish/outputs/N2_352-1_" + i + ".csv ");
+//        }
+//
+//        out.close();
+        new CommandLine(new AWSSparkRSFISH_IJ()).execute(args);
     }
 }
