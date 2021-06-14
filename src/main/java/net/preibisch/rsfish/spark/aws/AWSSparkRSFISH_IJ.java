@@ -27,6 +27,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -162,7 +163,12 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
 
         final S3Supplier s3Supplier = new S3Supplier(credPublicKey, credPrivateKey,region);
 
+        AtomicInteger totalProcessed = new AtomicInteger(0);
+        final int totalImages = image.size();
+
         rddIds.foreach( input -> {
+
+            System.out.println( "Processing:  " + totalProcessed.getAndIncrement() + " / " + totalImages );
 
             System.out.println( "Processing image " + input._1() + ", result written to " + input._2() );
 
