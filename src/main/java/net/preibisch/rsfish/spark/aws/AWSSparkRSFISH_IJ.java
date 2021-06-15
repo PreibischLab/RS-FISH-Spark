@@ -15,6 +15,7 @@ import net.imglib2.img.imageplus.ImagePlusImgs;
 import net.imglib2.view.Views;
 import net.preibisch.rsfish.spark.aws.tools.S3Supplier;
 import net.preibisch.rsfish.spark.aws.tools.S3Utils;
+import net.preibisch.rsfish.spark.aws.tools.TimeLog;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -116,6 +117,7 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
     @Override
     public Void call() throws Exception
     {
+        TimeLog timeLog = new TimeLog("main");
         if ( image.size() != output.size() )
         {
             System.out.println( "Number of input images (" + image.size() + ") and csv file outputs (" + output.size() + ") does not match. Stopping.");
@@ -166,7 +168,10 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
         AtomicInteger totalProcessed = new AtomicInteger(0);
         final int totalImages = image.size();
 
+
         rddIds.foreach( input -> {
+
+            TimeLog taskTimeLog = new TimeLog(input._2());
 
             System.out.println( "Processing:  " + totalProcessed.getAndIncrement() + " / " + totalImages );
 
@@ -240,11 +245,11 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
             else
                 System.out.println("Nothing to upload for "+new File(localPath).getName());
 //            S3Utils.savePoints(s3, allPoints, input._2());
-
+            taskTimeLog.done();
         });
 
         sc.close();
-
+        timeLog.done();
         System.out.println( "done." );
         return null;
     }
