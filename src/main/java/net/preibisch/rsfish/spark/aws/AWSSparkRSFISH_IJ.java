@@ -16,33 +16,34 @@ import net.imglib2.view.Views;
 import net.preibisch.rsfish.spark.aws.tools.S3Supplier;
 import net.preibisch.rsfish.spark.aws.tools.S3Utils;
 import net.preibisch.rsfish.spark.aws.tools.TimeLog;
+import org.apache.commons.io.FileUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.util.LongAccumulator;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class AWSSparkRSFISH_IJ implements Callable<Void>
-{
+public class AWSSparkRSFISH_IJ implements Callable<Void> {
     // TODO: support many images (many N5s and many ImageJ-readable ones)
 
     // input file
     @Option(names = {"-i", "--image"}, required = true, description = "input image(s) to be processed (need to be ImageJ-readable), e.g. -i '3://bucket-name/embryo_5_ch0.tif'")
-    private List< String > image = null;
+    private List<String> image = null;
 
     // output file
     @Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o '3://bucket-name/embryo_5_ch0.csv'")
-    private List< String > output = null;
+    private List<String> output = null;
 
     // intensity settings
     @Option(names = {"-i0", "--minIntensity"}, required = false, description = "minimal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
@@ -105,28 +106,30 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
     @Option(names = {"-reg", "--region"}, required = false, description = "S3 region Exmpl: us-east-1")
     private String region = Regions.US_EAST_1.getName();
 
+    @Option(names = {"-sl", "--slices"}, required = false, description = "Number of slices to parallelize task")
+    private int slices = 0;
+
     public AWSSparkRSFISH_IJ(String credPublicKey, String credPrivateKey, String region) {
         this.credPublicKey = credPublicKey;
         this.credPrivateKey = credPrivateKey;
         this.region = region;
     }
 
-    public AWSSparkRSFISH_IJ(){}
+    public AWSSparkRSFISH_IJ() {
+    }
 
 
     @Override
-    public Void call() throws Exception
-    {
+    public Void call() throws Exception {
         TimeLog timeLog = new TimeLog("main");
-        if ( image.size() != output.size() )
-        {
-            System.out.println( "Number of input images (" + image.size() + ") and csv file outputs (" + output.size() + ") does not match. Stopping.");
+        if (image.size() != output.size()) {
+            System.out.println("Number of input images (" + image.size() + ") and csv file outputs (" + output.size() + ") does not match. Stopping.");
             return null;
         }
 
-        System.out.println( "Processing " + image.size() + " images ... " );
+        System.out.println("Processing " + image.size() + " images ... ");
 
-        final List< Tuple2< String, String > > toProcess =
+        final List<Tuple2<String, String>> toProcess =
                 IntStream
                         .range(0, image.size())
                         .mapToObj(i -> new Tuple2<>(image.get(i), output.get(i)))
@@ -156,26 +159,30 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
         final double ransacNTimesStDev2 = this.ransacNTimesStDev2;
 
         final SparkConf sparkConf = new SparkConf().setAppName(AWSSparkRSFISH_IJ.class.getSimpleName());
+//        sparkConf.setMaster("local");
 //        sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
-        final JavaSparkContext sc = new JavaSparkContext( sparkConf );
+        final JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-        final JavaRDD<Tuple2< String, String > > rddIds = sc.parallelize( toProcess );
+
+        final JavaRDD<Tuple2<String, String>> rddIds;
+        if (slices > 0)
+            rddIds = sc.parallelize(toProcess, slices);
+        else
+            rddIds = sc.parallelize(toProcess);
 
         HelperFunctions.headless = true;
 
-        final S3Supplier s3Supplier = new S3Supplier(credPublicKey, credPrivateKey,region);
+        final S3Supplier s3Supplier = new S3Supplier(credPublicKey, credPrivateKey, region);
 
-        AtomicInteger totalProcessed = new AtomicInteger(0);
+        final LongAccumulator totalProcessedAccumulator = sc.sc().longAccumulator();
         final int totalImages = image.size();
 
-
-        rddIds.foreach( input -> {
-
+        rddIds.foreach(input -> {
             TimeLog taskTimeLog = new TimeLog(input._2());
+            totalProcessedAccumulator.add(1);
+            System.out.println("Processing:  " + totalProcessedAccumulator.value() + " / " + totalImages);
 
-            System.out.println( "Processing:  " + totalProcessed.getAndIncrement() + " / " + totalImages );
-
-            System.out.println( "Processing image " + input._1() + ", result written to " + input._2() );
+            System.out.println("Processing image " + input._1() + ", result written to " + input._2());
 
             // create parameter object
             final RadialSymParams params = new RadialSymParams();
@@ -185,37 +192,33 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
             params.useAnisotropyForDoG = true;
             params.ransacSelection = ransac; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
 
-            if ( minIntensity == maxIntensity )
-            {
+            if (minIntensity == maxIntensity) {
                 params.min = Double.NaN;
                 params.max = Double.NaN;
                 params.autoMinMax = true;
-            }
-            else
-            {
+            } else {
                 params.min = minIntensity;
                 params.max = maxIntensity;
                 params.autoMinMax = false;
             }
 
             // multiconsensus
-            if ( ransac == 2 )
-            {
+            if (ransac == 2) {
                 params.minNumInliers = ransacMinNumInliers;
                 params.nTimesStDev1 = ransacNTimesStDev1;
                 params.nTimesStDev2 = ransacNTimesStDev2;
             }
 
             // advanced
-            params.sigma = (float)sigma;
-            params.threshold = (float)threshold;
+            params.sigma = (float) sigma;
+            params.threshold = (float) threshold;
             params.supportRadius = supportRadius;
-            params.inlierRatio = (float)inlierRatio;
-            params.maxError = (float)maxError;
+            params.inlierRatio = (float) inlierRatio;
+            params.maxError = (float) maxError;
             params.intensityThreshold = intensityThreshold;
             params.bsMethod = background;
-            params.bsMaxError = (float)backgroundMaxError;
-            params.bsInlierRatio = (float)backgroundMinInlierRatio;
+            params.bsMaxError = (float) backgroundMaxError;
+            params.bsInlierRatio = (float) backgroundMinInlierRatio;
 
 
             // single-threaded within each block
@@ -225,33 +228,55 @@ public class AWSSparkRSFISH_IJ implements Callable<Void>
             final AmazonS3 s3 = s3Supplier.getS3();
             File tmpFoler = Files.createTempDir();
 
-            System.out.println("Tmp Folder :  "+tmpFoler.getAbsolutePath());
-            final String localPath = S3Utils.download(s3, tmpFoler,input._1()).getAbsolutePath();
+            System.out.println("Tmp Folder :  " + tmpFoler.getAbsolutePath());
+            File localFile = S3Utils.download(s3, tmpFoler, input._1());
+            if(localFile==null)
+                throw new IOException("File not found: "+input._1());
+            final String localPath = localFile.getAbsolutePath();
 
-            final String localOutput = new File(tmpFoler,S3Utils.getFileName(input._2())).getAbsolutePath();
+            final String localOutput = new File(tmpFoler, S3Utils.getFileName(input._2())).getAbsolutePath();
             params.resultsFilePath = localOutput;
-            final RandomAccessibleInterval img = ImagePlusImgs.from( new ImagePlus( localPath ) );
+            final RandomAccessibleInterval img = ImagePlusImgs.from(new ImagePlus(localPath));
 
             final ArrayList<double[]> allPoints = Radial_Symmetry.runRSFISH(
-                    (RandomAccessible)(Object)Views.extendMirrorSingle( img ),
-                    new FinalInterval( img ),
-                    new FinalInterval( img ),
-                    params );
+                    (RandomAccessible) (Object) Views.extendMirrorSingle(img),
+                    new FinalInterval(img),
+                    new FinalInterval(img),
+                    params);
 
-            System.out.println( "image " + input._1() + " found "  + allPoints.size() + " spots.");
+            System.out.println("image " + input._1() + " found " + allPoints.size() + " spots.");
 
-            if(new File(localOutput).exists())
-                S3Utils.uploadFile(s3,new File(localOutput),new AmazonS3URI(input._2()));
-            else
-                System.out.println("Nothing to upload for "+new File(localPath).getName());
+            final File localOutputFile = new File(localOutput);
+
+            if (!localOutputFile.exists()) {
+                System.out.println("Nothing to upload for " + localFile.getName());
+                if (!localOutputFile.createNewFile())
+                    System.out.println("Couldn't create empty output !");
+                else
+                    S3Utils.uploadFile(s3, localOutputFile, new AmazonS3URI(input._2()));
+            } else {
+                S3Utils.uploadFile(s3, localOutputFile, new AmazonS3URI(input._2()));
+            }
+
+
 //            S3Utils.savePoints(s3, allPoints, input._2());
+            clean(tmpFoler);
             taskTimeLog.done();
         });
 
         sc.close();
         timeLog.done();
-        System.out.println( "done." );
+        System.out.println("Final Processing count: " + totalProcessedAccumulator.value());
+        System.out.println("done.");
         return null;
+    }
+
+    private static void clean(File tmpFolder) {
+        try {
+            FileUtils.deleteDirectory(tmpFolder);
+        } catch (IOException e) {
+            System.out.println("Couldn't delete tmp Folder!");
+        }
     }
 
 
