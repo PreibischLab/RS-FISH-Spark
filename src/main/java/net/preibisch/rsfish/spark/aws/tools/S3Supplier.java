@@ -30,4 +30,16 @@ public class S3Supplier implements Serializable {
                 .withRegion(Regions.fromName(region))
                 .build();
     }
+
+    public String getCredPublicKey() {
+        return credPublicKey;
+    }
+
+    public String getCredPrivateKey() {
+        return credPrivateKey;
+    }
+
+    public String getRegion() {
+        return region;
+    }
 }

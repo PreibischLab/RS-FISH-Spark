@@ -1,7 +1,6 @@
 package net.preibisch.rsfish.spark.aws;
 
 
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.google.common.io.Files;
@@ -16,13 +15,11 @@ import net.imglib2.view.Views;
 import net.preibisch.rsfish.spark.aws.tools.S3Supplier;
 import net.preibisch.rsfish.spark.aws.tools.S3Utils;
 import net.preibisch.rsfish.spark.aws.tools.TimeLog;
+import net.preibisch.rsfish.spark.aws.tools.sparkOpt.SparkInstancesConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.util.LongAccumulator;
 import parameters.RadialSymParams;
-import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
@@ -30,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -97,25 +95,13 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
     @Option(names = {"-rn2", "--ransacNTimesStDev2"}, required = false, description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
     private double ransacNTimesStDev2 = 6.0;
 
-    @Option(names = {"-pk", "--publicKey"}, required = false, description = "Credential public key")
-    private String credPublicKey;
 
-    @Option(names = {"-pp", "--privateKey"}, required = false, description = "Credential private key")
-    private String credPrivateKey;
+    private final S3Supplier s3Supplier;
+    private final SparkInstancesConfiguration sparkInstancesConfiguration;
 
-    @Option(names = {"-reg", "--region"}, required = false, description = "S3 region Exmpl: us-east-1")
-    private String region = Regions.US_EAST_1.getName();
-
-    @Option(names = {"-sl", "--slices"}, required = false, description = "Number of slices to parallelize task")
-    private int slices = 0;
-
-    public AWSSparkRSFISH_IJ(String credPublicKey, String credPrivateKey, String region) {
-        this.credPublicKey = credPublicKey;
-        this.credPrivateKey = credPrivateKey;
-        this.region = region;
-    }
-
-    public AWSSparkRSFISH_IJ() {
+    public AWSSparkRSFISH_IJ(S3Supplier s3supplier, SparkInstancesConfiguration sparkInstancesConfiguration) {
+        this.s3Supplier = s3supplier;
+        this.sparkInstancesConfiguration = sparkInstancesConfiguration;
     }
 
 
@@ -158,34 +144,32 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
         final double ransacNTimesStDev1 = this.ransacNTimesStDev1;
         final double ransacNTimesStDev2 = this.ransacNTimesStDev2;
 
+
         final SparkConf sparkConf = new SparkConf().setAppName(AWSSparkRSFISH_IJ.class.getSimpleName());
+        for (Map.Entry<String, String> entry : sparkInstancesConfiguration.getAll().entrySet()) {
+            sparkConf.set(entry.getKey(), entry.getValue());
+        }
 //        sparkConf.setMaster("local");
 //        sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
         final JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-
-        final JavaRDD<Tuple2<String, String>> rddIds;
-        if (slices > 0)
-            rddIds = sc.parallelize(toProcess, slices);
-        else
-            rddIds = sc.parallelize(toProcess);
-
         HelperFunctions.headless = true;
 
-        final S3Supplier s3Supplier = new S3Supplier(credPublicKey, credPrivateKey, region);
+//        final LongAccumulator totalProcessedAccumulator = sc.sc().longAccumulator();
+//        final int totalImages = image.size();
+        final String publicKey = s3Supplier.getCredPublicKey();
+        final String privateKey = s3Supplier.getCredPrivateKey();
+        final String region = s3Supplier.getRegion();
 
-        final LongAccumulator totalProcessedAccumulator = sc.sc().longAccumulator();
-        final int totalImages = image.size();
-
-        rddIds.foreach(input -> {
+        sc.parallelize(toProcess).foreach(input -> {
             TimeLog taskTimeLog = new TimeLog(input._2());
-            totalProcessedAccumulator.add(1);
-            System.out.println("Processing:  " + totalProcessedAccumulator.value() + " / " + totalImages);
+//            totalProcessedAccumulator.add(1);
+//            System.out.println("Processing:  " + totalProcessedAccumulator.value() + " / " + totalImages);
 
             System.out.println("Processing image " + input._1() + ", result written to " + input._2());
 
             // create parameter object
-            final RadialSymParams params = new RadialSymParams();
+            RadialSymParams params = new RadialSymParams();
 
             // general
             params.anisotropyCoefficient = anisotropy;
@@ -225,18 +209,17 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
             params.numThreads = 1;
 
 
-            final AmazonS3 s3 = s3Supplier.getS3();
+            AmazonS3 s3 = new S3Supplier(publicKey, privateKey, region).getS3();
             File tmpFoler = Files.createTempDir();
 
             System.out.println("Tmp Folder :  " + tmpFoler.getAbsolutePath());
             File localFile = S3Utils.download(s3, tmpFoler, input._1());
-            if(localFile==null)
-                throw new IOException("File not found: "+input._1());
-            final String localPath = localFile.getAbsolutePath();
+            if (localFile == null)
+                throw new IOException("File not found: " + input._1());
 
-            final String localOutput = new File(tmpFoler, S3Utils.getFileName(input._2())).getAbsolutePath();
-            params.resultsFilePath = localOutput;
-            final RandomAccessibleInterval img = ImagePlusImgs.from(new ImagePlus(localPath));
+            File localOutputFile = new File(tmpFoler, S3Utils.getFileName(input._2()));
+            params.resultsFilePath = localOutputFile.getAbsolutePath();
+            RandomAccessibleInterval img = ImagePlusImgs.from(new ImagePlus(localFile.getAbsolutePath()));
 
             final ArrayList<double[]> allPoints = Radial_Symmetry.runRSFISH(
                     (RandomAccessible) (Object) Views.extendMirrorSingle(img),
@@ -245,8 +228,6 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
                     params);
 
             System.out.println("image " + input._1() + " found " + allPoints.size() + " spots.");
-
-            final File localOutputFile = new File(localOutput);
 
             if (!localOutputFile.exists()) {
                 System.out.println("Nothing to upload for " + localFile.getName());
@@ -258,15 +239,24 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
                 S3Utils.uploadFile(s3, localOutputFile, new AmazonS3URI(input._2()));
             }
 
-
 //            S3Utils.savePoints(s3, allPoints, input._2());
             clean(tmpFoler);
             taskTimeLog.done();
+
+            // Garbage collector is not working well on AWS EMR, that's why we are cleaning memory here
+            img = null;
+            params = null;
+            taskTimeLog = null;
+            s3 = null;
+            tmpFoler = null;
+            localFile = null;
+            localOutputFile = null;
+            System.gc();
         });
 
         sc.close();
         timeLog.done();
-        System.out.println("Final Processing count: " + totalProcessedAccumulator.value());
+//        System.out.println("Final Processing count: " + totalProcessedAccumulator.value());
         System.out.println("done.");
         return null;
     }
@@ -277,24 +267,5 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
         } catch (IOException e) {
             System.out.println("Couldn't delete tmp Folder!");
         }
-    }
-
-
-    public static final void main(final String... args) {
-
-
-//        PrintWriter out = TextFileAccess.openFileWrite( "/Users/Marwan/Desktop/cmdline_cluster.txt" );
-//
-//        out.print("-i0 4166.0 " +
-//                "-i1 46562.0 " +
-//                "-a 1.0 ");
-//        for ( int i = 0; i < 1000; ++i )
-//        {
-//            out.print("-i s3://rsfish/N2_352-1.tif " +
-//                    "-o s3://rsfish/outputs/N2_352-1_" + i + ".csv ");
-//        }
-//
-//        out.close();
-        new CommandLine(new AWSSparkRSFISH_IJ()).execute(args);
     }
 }

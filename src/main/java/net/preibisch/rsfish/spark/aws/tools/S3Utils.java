@@ -18,6 +18,7 @@ import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.google.common.io.CharStreams;
 import org.apache.commons.codec.binary.StringUtils;
+import org.apache.commons.io.FilenameUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class S3Utils {
     public static boolean uploadFile(AmazonS3 s3, File file, AmazonS3URI s3uri) throws InterruptedException {
@@ -94,20 +96,47 @@ public class S3Utils {
         }
     }
 
-    public static ArrayList<AmazonS3URI> getFilesList(AmazonS3 s3, AmazonS3URI uri, String ext) {
+    public static List<S3ObjectSummary> getList(AmazonS3 s3, String bucket) {
         List<S3ObjectSummary> keyList = new ArrayList<S3ObjectSummary>();
-        ObjectListing objects = s3.listObjects(uri.getBucket());
+        ObjectListing objects = s3.listObjects(bucket);
         keyList.addAll(objects.getObjectSummaries());
         while (objects.isTruncated()) {
             objects = s3.listNextBatchOfObjects(objects);
             keyList.addAll(objects.getObjectSummaries());
         }
+        return keyList;
+    }
+
+    public static List<S3ObjectSummary> getFilesListSummary(AmazonS3 s3, AmazonS3URI uri, String ext) {
+        List<S3ObjectSummary> keyList = getList(s3,uri.getBucket());
+        System.out.println(keyList.size());
+        keyList.stream()
+                .filter(os ->((os.getKey().contains(uri.getKey())) && os.getKey().endsWith(ext)) ).collect(Collectors.toList());
+        System.out.println(keyList.size());
+        return keyList;
+    }
+
+    public static ArrayList<AmazonS3URI> getFilesList(AmazonS3 s3, AmazonS3URI uri, String ext) {
+        List<S3ObjectSummary> keyList = getList(s3,uri.getBucket());
         ArrayList<AmazonS3URI> result = new ArrayList<AmazonS3URI>();
         String baseUri = uri.toString().replace(uri.getKey(), "");
         for (S3ObjectSummary os : keyList) {
             if ((os.getKey().contains(uri.getKey())) && os.getKey().endsWith(ext)) {
-                AmazonS3URI currentUri = new AmazonS3URI(baseUri+os.getKey());
+                AmazonS3URI currentUri = new AmazonS3URI(baseUri + os.getKey());
                 result.add(currentUri);
+            }
+        }
+        return result;
+    }
+
+    public static ArrayList<String> getFilesNamesOnly(AmazonS3 s3, AmazonS3URI uri) {
+        List<S3ObjectSummary> keyList = getList(s3,uri.getBucket());
+        ArrayList<String> result = new ArrayList<String>();
+        String baseUri = uri.toString().replace(uri.getKey(), "");
+        for (S3ObjectSummary os : keyList) {
+            if ((os.getKey().contains(uri.getKey()))) {
+                String filename = FilenameUtils.getBaseName( os.getKey());
+                result.add(filename);
             }
         }
         return result;
