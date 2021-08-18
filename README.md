@@ -43,23 +43,38 @@ _**1. Create an Access User with S3 full access permission:**_
 
 Create a new IAM group for the RS-FISH project:
 
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam_group2.png" alt="" width="800">
 
 Go to the IAM dashboard:
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam.png" alt="" width="800">
+
 
 Click Create new Group from ```IAM dashboard -> Groups```.
 
 
-Add the policy AmazonS3FullAccess to the group and confirm.
+Add the policy ```AmazonS3FullAccess``` to the group and confirm.
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam_group3.jpg" alt="" width="1000">
+
 
 
 Create a new IAM user:
 Add user from the ```IAM dashboard -> Users```.
 
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/user1.jpg" alt="" width="1000">
+
+
 
 Add the user to the group previously created for the project.
 
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/user5.jpg" alt="" width="1000">
+
+
 
 Save and keep the credentials (Public key & private key). It will be needed for running the project.
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam_user2.jpg" alt="" width="10000">
 
 
 _**2. Upload your data:**_
@@ -73,11 +88,23 @@ _**3. Create an EMR server**_
 To allocate the needed resources to process our data, an EMR cluster is needed:
 Click on Create cluster from the EMR dashboard.
 
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/spark3.jpg" alt="" width="800">
+
+
+
 *Configuration:* 
 * Add Spark step for RS-FISH:
 * Release : emr-5.33.0
 * Launch mode: select ```Step execution -> a new 'Add step menu'``` will appear
 * Step Type: select Spark Application and click configure
+
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/spark1.jpg" alt="" width="1000">
+
+
 
 * Spark-submit options: --class 
 * for N5 input: net.preibisch.rsfish.spark.aws.AWSSparkRSFISH
@@ -90,8 +117,18 @@ Action on failure: Terminate cluster
 
 Click Add
  
+ 
+ 
+ <img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/spark2.jpg" alt="" width="1000">
+
+ 
 
 Select the hardware configuration and the number of execution nodes.
+
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/spark4.jpg" alt="" width="1000">
+
 
 
 
@@ -102,6 +139,13 @@ _**Low cost:**_
 Cost can be optimized up to 90% by selecting Spot instances instead of on-demand instances. When creating your project click on advance mode and select Spot instances for the execution nodes.
 E.g., we used instance: r4.2xlange for spot price $0.181/hr where the on-demand price is  $0.640/hr
 
+
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/sparkad1.jpg" alt="" width="1000">
+
+
+<img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/sparkad2.jpg" alt="" width="1000">
 
 _**High memory instances:**_
 
