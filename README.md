@@ -46,6 +46,7 @@ Create a new IAM group for the RS-FISH project:
 <img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam_group2.png" alt="" width="800">
 
 Go to the IAM dashboard:
+
 <img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/iam.png" alt="" width="800">
 
 
