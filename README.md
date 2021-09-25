@@ -1,5 +1,5 @@
 # RS-FISH-Spark
-The Spark version of RS-FISH can analyze large N5 volumes in a distributed fashion locally, on the cluster, or in the cloud. 
+The Spark version of RS-FISH can analyze large N5 volumes in a distributed fashion locally, on the cluster, or in the cloud.
 
 This repository contains code to run https://github.com/PreibischLab/RS-FISH in blocks using Spark. It requires the dataset to be saved in the N5 format. You can easily resave and open an N5 dataset in Fiji using the pre-installed [n5-ij](https://github.com/saalfeldlab/n5-ij). An example N5 file can be found in the [resource folder](https://github.com/PreibischLab/RS-FISH-Spark/tree/main/src/main/resources).
 
@@ -26,7 +26,7 @@ For **cluster execution** please contact your IT department for how to distribut
 ### Cloud execution <a name="cloud">
 </a> 
 
-For **cloud execution**: Distributed processing using Amazon Web Services (AWS). 
+For **cloud execution**: Distributed processing using Amazon Web Services (AWS).
 
 Using cloud services enables scaling analysis of terabyte-sized data or thousands of images regardless of hardware devices. Within the RS-FISH-Cloud version, terabytes of images can be processed within one hour using AWS services.
 
@@ -35,7 +35,7 @@ Using cloud services enables scaling analysis of terabyte-sized data or thousand
 Running RS-FISH in AWS requires a user account with four basic permissions:
 * S3: is a data storage service used to store and manage input and output data.
 * IAM: is Identity and Access Management, and it enables you to manage access to AWS services and resources securely.
-* EC2: used to rent virtual computers on which to run our application. 
+* EC2: used to rent virtual computers on which to run our application.
 * EMR: Elastic MapReduce used to create, manage and scale EC2 instances.
 
 **Steps:**
@@ -80,11 +80,11 @@ Save and keep the credentials (Public key & private key). It will be needed for 
 
 _**2. Upload your data:**_
 
-It is recommended to create a new S3 bucket for the project. 
+It is recommended to create a new S3 bucket for the project.
 Then upload the input data into the bucket.
 This can be done using the AWS website or using our java application.
 
-_**3. Create an EMR server**_ 
+_**3. Create an EMR server**_
 
 To allocate the needed resources to process our data, an EMR cluster is needed:
 Click on Create cluster from the EMR dashboard.
@@ -95,7 +95,7 @@ Click on Create cluster from the EMR dashboard.
 
 
 
-*Configuration:* 
+*Configuration:*
 * Add Spark step for RS-FISH:
 * Release : emr-5.33.0
 * Launch mode: select ```Step execution -> a new 'Add step menu'``` will appear
@@ -107,22 +107,22 @@ Click on Create cluster from the EMR dashboard.
 
 
 
-* Spark-submit options: --class 
+* Spark-submit options: --class
 * for N5 input: net.preibisch.rsfish.spark.aws.AWSSparkRSFISH
 * For multiple tifs: net.preibisch.rsfish.spark.aws.RunAWSSparkRSFISHIJ
 * Application location*: s3://preibischlab-release-jars/RS-Fish-jar-with-dependencies.jar
 * Arguments: minimum task arguments for default params:
--i =< N5 container path in s3, e.g. -i s3://bucket-name/smFish.n5 -o, --output= output CSV file in S3, e.g. -o s3://rs-fish/embryo_5_ch0.csv -p, --path= The path of the input Data inside bucket e.g. -p N2-702-ch0/c0/s0 -pk, --publicKey= User public key (*previously created) -pp, --privateKey= User private key
- 
+  -i =< N5 container path in s3, e.g. -i s3://bucket-name/smFish.n5 -o, --output= output CSV file in S3, e.g. -o s3://rs-fish/embryo_5_ch0.csv -p, --path= The path of the input Data inside bucket e.g. -p N2-702-ch0/c0/s0 -pk, --publicKey= User public key (*previously created) -pp, --privateKey= User private key
+
 Action on failure: Terminate cluster
 
 Click Add
- 
- 
- 
+
+
+
  <img src="https://github.com/PreibischLab/RadialSymmetryLocalization/blob/master/documents/Tutorial_screenshots/spark2.jpg" alt="" width="1000">
 
- 
+
 
 Select the hardware configuration and the number of execution nodes.
 
@@ -157,7 +157,7 @@ _**Budget information:**_
 
 For 10000 images processed in 1h 9min using 39 execution instances with a total cost:
 Spot: 8,46$
-On-demand: 28,16$ 
+On-demand: 28,16$
 To keep the budget under control, you can use the budget service provided by AWS,
 it allows you to get email alerts based on current or forecasted costs.
  
