@@ -12,14 +12,18 @@ The code to run the distributed, [Spark](http://spark.apache.org)-based RS-FISH 
 ### Local execution <a name="local">
 </a> 
 
-For **local execution** (comparable to efficient multi-threading), compile the repository using `mvn clean package` and execute the above class or import the project into Eclipse and run it from there. Importantly, Spark requires the JVM option `-Dspark.master=local[8]`, where the number in brackets specifies the number of threads being used.
+For **local execution** (comparable to efficient multi-threading), compile the repository using `mvn clean package`, which will create a **farjar** in the target directory called `RS-Fish-jar-with-dependencies.jar`. You can then execute the [RS-FISH class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH.java) (for large volumes) or the [RS-FISH-IJ class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH_IJ.java) (for many smaller images), for example:
 
+`java -cp target/RS-Fish-jar-with-dependencies.jar -Xmx20G -Dspark.master=local[8] net.preibisch.rsfish.spark.SparkRSFISH --image=/home/test.n5 --dataset=/N2/s0 --minIntensity=0 --maxIntensity=4096 --anisotropy=0.7 --output=points.csv`
 
+Importantly, Spark requires the JVM option `-Dspark.master=local[8]` for local execution, where the number in brackets specifies the number of threads being used, while `Xmx20G` defines that 20GB of RAM can be used. **You can save an image in the required N5 format from Fiji using `File > Save As > Export N5`**
+
+Alternatively, you can import the project into Eclipse and run it from there. 
 
 ### Cluster execution <a name="cluster">
 </a> 
 
-For **cluster execution** please contact your IT department for how to distribute Spark code on your local cluster. You will need to do create a **fatjar** using Maven first.
+For **cluster execution** please contact your IT department for how to distribute Spark code on your local cluster. You will need to do create a **fatjar** using Maven first by calling `mvn clean package` (see above).
 
 
 
