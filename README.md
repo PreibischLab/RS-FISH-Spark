@@ -16,9 +16,16 @@ For **local execution** (comparable to efficient multi-threading), compile the r
 
 `java -cp target/RS-Fish-jar-with-dependencies.jar -Xmx20G -Dspark.master=local[8] net.preibisch.rsfish.spark.SparkRSFISH --image=/home/test.n5 --dataset=/N2/s0 --minIntensity=0 --maxIntensity=4096 --anisotropy=0.7 --output=points.csv`
 
+*Alternatively, you can import the project into Eclipse and run it from there.*
+
 Importantly, Spark requires the JVM option `-Dspark.master=local[8]` for local execution, where the number in brackets specifies the number of threads being used, while `Xmx20G` defines that 20GB of RAM can be used. **You can save an image in the required N5 format from Fiji using `File > Save As > Export N5`**
 
-Alternatively, you can import the project into Eclipse and run it from there. 
+The result can be **interactively viewed in BigDataViewer** using the main [RS-FISH](https://github.com/PreibischLab/RS-FISH) repository (see Supplementary Video):
+
+```
+./install
+./csv-overlay-bdv -c points.csv -i /home/test.n5 -d /N2 -s 2.0
+```
 
 ### Cluster execution <a name="cluster">
 </a> 
