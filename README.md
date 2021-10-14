@@ -20,7 +20,7 @@ For **local execution** (comparable to efficient multi-threading), compile the r
 
 Importantly, Spark requires the JVM option `-Dspark.master=local[8]` for local execution, where the number in brackets specifies the number of threads being used, while `Xmx20G` defines that 20GB of RAM can be used. **You can save an image in the required N5 format from Fiji using `File > Save As > Export N5`**
 
-The result can be **interactively viewed in BigDataViewer** using the main [RS-FISH](https://github.com/PreibischLab/RS-FISH) repository (see Supplementary Video):
+The result can be **interactively viewed in BigDataViewer** using the main [RS-FISH](https://github.com/PreibischLab/RS-FISH) repository (see [Supplementary Video](https://drive.google.com/file/d/1vUS5tih5NJlniEGM4Cr-b5AjBy8f_wtk/view?usp=sharing)):
 
 ```
 ./install
