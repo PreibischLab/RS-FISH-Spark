@@ -23,7 +23,7 @@ Alternatively, you can import the project into Eclipse and run it from there.
 ### Cluster execution <a name="cluster">
 </a> 
 
-For **cluster execution** please contact your IT department for how to distribute Spark code on your local cluster. You will need to do create a **fatjar** using Maven first.
+For **cluster execution** please contact your IT department for how to distribute Spark code on your local cluster. You will need to do create a **fatjar** using Maven first by calling `mvn clean package` (see above).
 
 
 
