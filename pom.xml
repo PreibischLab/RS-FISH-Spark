@@ -107,7 +107,7 @@
         <dependency>
             <groupId>com.github.PreibischLab</groupId>
             <artifactId>RS-FISH</artifactId>
-            <version>71d1612</version>
+            <version>ffccf9b</version>
         </dependency>
         <dependency>
             <groupId>com.amazonaws</groupId>
