@@ -3,12 +3,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>RS-FISH-Spark</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
 
     <parent>
         <groupId>org.scijava</groupId>
         <artifactId>pom-scijava</artifactId>
-        <version>30.0.0</version>
+        <version>31.1.0</version>
         <relativePath/>
     </parent>
 
@@ -37,6 +37,18 @@
             <roles>
                 <role>founder</role>
                 <role>lead</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>reviewer</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
+        <developer>
+            <id>mzouink</id>
+            <name>Marwan Zouinkhi</name>
+            <url>http://imagej.net/User:mzouink</url>
+            <roles>
                 <role>developer</role>
                 <role>debugger</role>
                 <role>reviewer</role>
@@ -108,7 +120,7 @@
         <dependency>
             <groupId>com.github.PreibischLab</groupId>
             <artifactId>RS-FISH</artifactId>
-            <version>ffccf9b</version>
+            <version>330a23b</version>
         </dependency>
         <dependency>
             <groupId>com.amazonaws</groupId>
