@@ -1,5 +1,20 @@
 package net.preibisch.rsfish.spark;
 
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.janelia.saalfeldlab.n5.DatasetAttributes;
+import org.janelia.saalfeldlab.n5.N5FSReader;
+import org.janelia.saalfeldlab.n5.N5Reader;
+import org.janelia.saalfeldlab.n5.hdf5.N5HDF5Reader;
+import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
+import org.janelia.saalfeldlab.n5.zarr.N5ZarrReader;
+
 import benchmark.TextFileAccess;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
@@ -9,38 +24,31 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.janelia.saalfeldlab.n5.DatasetAttributes;
-import org.janelia.saalfeldlab.n5.N5FSReader;
-import org.janelia.saalfeldlab.n5.N5Reader;
-import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import scala.Tuple2;
 
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.concurrent.Callable;
-
 public class SparkRSFISH implements Callable<Void>
 {
+	public enum StorageType { N5, ZARR, HDF5 }
+
 	// input file
-	@Option(names = {"-i", "--image"}, required = true, description = "N5 container path, e.g. -i /home/smFish.n5")
+	@Option(names = {"-i", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
 	private String image = null;
 
-	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5, e.g. -d 'embryo_5_ch0/c0/s0'")
+	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5/HDF5/ZARR, e.g. -d 'embryo_5_ch0/c0/s0'")
 	private String dataset = null;
 
 	// output file
 	@Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
 	private String output = null;
 
+	@Option(names = {"-s", "--storage"}, defaultValue = "N5", required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
+	private StorageType storageType = null;
+
 	// processing options
-	@Option(names = "--blockSize", required = false, description = "Size of output blocks, e.g. 128,128,64 or 512,512 (default: as listed before)")
+	@Option(names = "--blockSize", required = false, description = "Blocksize for processing, e.g. 128,128,64 or 512,512 (default: as listed under e.g.)")
 	private String blockSizeString = null;
 	private int[] blockSize;
 	private static int[] defaultBlockSize2d = new int[] { 512, 512 };
@@ -109,12 +117,22 @@ public class SparkRSFISH implements Callable<Void>
 	@Override
 	public Void call() throws Exception
 	{
-		final N5Reader n5 = new N5FSReader( image );
-		final DatasetAttributes att = n5.getDatasetAttributes( dataset );
+		final N5Reader blockedFSReader;
+
+		if ( StorageType.N5.equals(storageType) )
+			blockedFSReader = new N5FSReader( image );
+		else if ( StorageType.ZARR.equals(storageType) )
+			blockedFSReader = new N5ZarrReader(image);
+		else if ( StorageType.HDF5.equals(storageType) )
+			blockedFSReader = new N5HDF5Reader(image);
+		else
+			throw new RuntimeException( "storageType " + storageType + " not supported." );
+
+		final DatasetAttributes att = blockedFSReader.getDatasetAttributes( dataset );
 		final long[] dimensions = att.getDimensions();
 
-		System.out.println( "N5 dataset dimensionality: " + att.getNumDimensions() );
-		System.out.println( "N5 dataset size: " + Util.printCoordinates( dimensions ));
+		System.out.println( "N5/HDF5/ZARR dataset dimensionality: " + att.getNumDimensions() );
+		System.out.println( "N5/HDF5/ZARR dataset size: " + Util.printCoordinates( dimensions ));
 
 		this.minInterval = new long[ att.getNumDimensions() ];
 		this.maxInterval = new long[ att.getNumDimensions() ];
@@ -211,8 +229,18 @@ public class SparkRSFISH implements Callable<Void>
 
 			System.out.println( "Processing block " + block.id() );
 
-			final N5Reader n5Local = new N5FSReader( imageName );
-			final RandomAccessibleInterval img = N5Utils.open( n5Local, datasetName );
+			final N5Reader blockedFSReaderLocal;
+
+			if ( StorageType.N5.equals(storageType) )
+				blockedFSReaderLocal = new N5FSReader( imageName );
+			else if ( StorageType.ZARR.equals(storageType) )
+				blockedFSReaderLocal = new N5ZarrReader(imageName);
+			else if ( StorageType.HDF5.equals(storageType) )
+				blockedFSReaderLocal = new N5HDF5Reader(imageName);
+			else
+				throw new RuntimeException( "storageType " + storageType + " not supported." );
+
+			final RandomAccessibleInterval img = N5Utils.open( blockedFSReaderLocal, datasetName );
 
 			HelperFunctions.headless = true;
 			ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
