@@ -44,7 +44,7 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
 	private String output = null;
 
-	@Option(names = {"-s", "--storage"}, defaultValue = "N5", required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
+	@Option(names = {"--storage"}, defaultValue = "N5", required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
 	private StorageType storageType = null;
 
 	// processing options
