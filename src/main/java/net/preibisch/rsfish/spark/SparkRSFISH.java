@@ -224,6 +224,9 @@ public class SparkRSFISH implements Callable<Void>
 		// single-threaded within each block
 		params.numThreads = 1;
 
+		// the enum needs to be final to be serializable
+		final StorageType storageLocal = storageType;
+
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
 
@@ -231,14 +234,14 @@ public class SparkRSFISH implements Callable<Void>
 
 			final N5Reader blockedFSReaderLocal;
 
-			if ( StorageType.N5.equals(storageType) )
+			if ( StorageType.N5.equals(storageLocal) )
 				blockedFSReaderLocal = new N5FSReader( imageName );
-			else if ( StorageType.ZARR.equals(storageType) )
+			else if ( StorageType.ZARR.equals(storageLocal) )
 				blockedFSReaderLocal = new N5ZarrReader(imageName);
-			else if ( StorageType.HDF5.equals(storageType) )
+			else if ( StorageType.HDF5.equals(storageLocal) )
 				blockedFSReaderLocal = new N5HDF5Reader(imageName);
 			else
-				throw new RuntimeException( "storageType " + storageType + " not supported." );
+				throw new RuntimeException( "storageType " + storageLocal + " not supported." );
 
 			final RandomAccessibleInterval img = N5Utils.open( blockedFSReaderLocal, datasetName );
 
