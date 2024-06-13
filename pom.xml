@@ -3,12 +3,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>RS-FISH-Spark</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.2-SNAPSHOT</version>
 
     <parent>
         <groupId>org.scijava</groupId>
         <artifactId>pom-scijava</artifactId>
-        <version>30.0.0</version>
+        <version>37.0.0</version>
         <relativePath/>
     </parent>
 
@@ -99,16 +99,17 @@
             <id>imagej.public</id>
             <url>https://maven.imagej.net/content/groups/public</url>
         </repository>
-        <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
-        </repository>
     </repositories>
     <dependencies>
         <dependency>
-            <groupId>com.github.PreibischLab</groupId>
-            <artifactId>RS-FISH</artifactId>
-            <version>ffccf9b</version>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo</artifactId>
+            <version>5.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.preibisch</groupId>
+            <artifactId>Radial_SymmetryLocalization</artifactId>
+            <version>2.3.7</version>
         </dependency>
         <dependency>
             <groupId>com.amazonaws</groupId>
@@ -145,6 +146,14 @@
             <artifactId>spark-core_2.11</artifactId>
             <version>2.4.7</version>
             <exclusions>
+                <exclusion>
+                    <groupId>javax.xml.stream</groupId>
+                    <artifactId>stax-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.esotericsoftware</groupId>
+                    <artifactId>kryo-shaded</artifactId>
+                </exclusion>
                 <exclusion>
                     <artifactId>netty-all</artifactId>
                     <groupId>io.netty</groupId>
