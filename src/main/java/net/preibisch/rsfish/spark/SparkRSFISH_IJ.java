@@ -125,6 +125,7 @@ public class SparkRSFISH_IJ implements Callable<Void>
 
 		// background method
 		final int background = this.background;
+		final int intensityMethod = this.intensityMethod;
 		final double backgroundMaxError = this.backgroundMaxError;
 		final double backgroundMinInlierRatio = this.backgroundMinInlierRatio;
 
@@ -134,7 +135,8 @@ public class SparkRSFISH_IJ implements Callable<Void>
 		final double ransacNTimesStDev2 = this.ransacNTimesStDev2;
 
 		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH_IJ.class.getSimpleName());
-		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
+//		.setMaster("local[*]");
+//		sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		final JavaRDD<Tuple2< String, String > > rddIds = sc.parallelize( toProcess );
@@ -209,28 +211,26 @@ public class SparkRSFISH_IJ implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
-		/*
-		PrintWriter out = TextFileAccess.openFileWrite( "/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/cmdline.txt" );
 
-		out.println("-i0 4166.0\n" + 
-				"-i1 46562.0\n" + 
-				"-a 1.0");
-		for ( int i = 0; i < 10000; ++i )
-		{
-			out.println("-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'\n" + 
-					"-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0_" + i + ".tif.csv'");
-		}
-		
-		out.close();
+//		PrintWriter out = TextFileAccess.openFileWrite( "/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/cmdline.txt" );
+//
+//		out.println("-i0 4166.0\n" +
+//				"-i1 46562.0\n" +
+//				"-a 1.0");
+//		for ( int i = 0; i < 10000; ++i )
+//		{
+//			out.println("-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'\n" +
+//					"-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0_" + i + ".tif.csv'");
+//		}
 
-		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'
-		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif.csv'
-		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif'
-		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif.csv'
-		-i0 4166.0
-		-i1 46562.0
-		-a 1.0
-		*/
+//		out.close();
+//		String[] arg = new String[]{
+//				"-i0", "4166.0",
+//				"-i1", "46562.0",
+//				"-a", "1.0",
+//				"-i", "/Users/zouinkhim/Desktop/java/RS-FISH-Spark/src/main/resources/multiple_dots_2D.tif",
+//				"-o", "/Users/zouinkhim/Desktop/java/RS-FISH-Spark/src/main/resources/multiple_dots_2D.csv"
+//		};
 
 		new CommandLine( new SparkRSFISH_IJ() ).execute( args );
 	}
