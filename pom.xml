@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.scijava</groupId>
         <artifactId>pom-scijava</artifactId>
-        <version>30.0.0</version>
+        <version>39.0.0</version>
         <relativePath/>
     </parent>
 
@@ -89,7 +89,7 @@
 
     <properties>
         <!--  <maven.compiler.release>8</maven.compiler.release> -->
-        <scijava.jvm.version>1.8</scijava.jvm.version>
+        <!-- <scijava.jvm.version>1.8</scijava.jvm.version> -->
         <license.licenseName>gpl_v2</license.licenseName>
         <license.copyrightOwners>Developers.</license.copyrightOwners>
     </properties>
@@ -106,30 +106,37 @@
     </repositories>
     <dependencies>
         <dependency>
-            <groupId>com.github.PreibischLab</groupId>
-            <artifactId>RS-FISH</artifactId>
-            <version>ffccf9b</version>
+            <groupId>net.preibisch</groupId>
+            <artifactId>Radial_SymmetryLocalization</artifactId>
+            <version>2.4.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>ome</groupId>
+                    <artifactId>formats-bsd</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.openmicroscopy</groupId>
+                    <artifactId>ome-common</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>${aws-java-sdk-s3.version}</version>
-        </dependency>
+		<dependency>
+			<groupId>org.janelia.saalfeldlab</groupId>
+			<artifactId>n5-universe</artifactId>
+			<!-- <version>1.4.1</version> -->
+		</dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
             <artifactId>n5</artifactId>
-            <version>2.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.janelia.saalfeldlab</groupId>
+            <artifactId>n5-zarr</artifactId>
         </dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
             <artifactId>n5-aws-s3</artifactId>
-            <version>3.2.0</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.janelia.saalfeldlab</groupId>
-                    <artifactId>n5</artifactId>
-                </exclusion>
-            </exclusions>
+            <!-- <version>4.0.0</version> -->
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -182,8 +189,11 @@
                     <artifactId>jets3t</artifactId>
                     <groupId>net.java.dev.jets3t</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>javax.xml.stream</groupId>
+                    <artifactId>stax-api</artifactId>
+                </exclusion>
             </exclusions>
-
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -198,16 +208,6 @@
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
             <version>3.9.9.Final</version>
-        </dependency>
-        <dependency>
-        	<groupId>org.janelia.saalfeldlab</groupId>
-        	<artifactId>n5-hdf5</artifactId>
-        	<version>1.3.0</version>
-        </dependency>
-        <dependency>
-        	<groupId>org.janelia.saalfeldlab</groupId>
-        	<artifactId>n5-zarr</artifactId>
-        	<version>0.0.6</version>
         </dependency>
     </dependencies>
     <groupId>net.preibisch</groupId>
