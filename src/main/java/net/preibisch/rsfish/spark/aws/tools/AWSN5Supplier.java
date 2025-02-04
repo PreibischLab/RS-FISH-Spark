@@ -42,7 +42,7 @@ public class AWSN5Supplier implements Serializable {
         AmazonS3 s3 = getS3();
         System.out.println("Got S3: " + s3.getRegionName());
 
-        return new N5AmazonS3Reader(s3, new AmazonS3URI(file));
+        return new N5AmazonS3Reader(s3, file);
     }
 
     public boolean exists() {
