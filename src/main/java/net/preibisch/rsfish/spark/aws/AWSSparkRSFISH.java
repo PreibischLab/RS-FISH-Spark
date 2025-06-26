@@ -242,7 +242,8 @@ public class AWSSparkRSFISH implements Callable<Void> {
                 }
             }
             HelperFunctions.headless = true;
-            ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            List<double[]> points = Radial_Symmetry.runRSFISH(
                     (RandomAccessible) Views.extendMirrorSingle(img3D),
                     new FinalInterval(minCoords, maxCoords),
                     new FinalInterval(block.minCoords(), block.maxCoords()),

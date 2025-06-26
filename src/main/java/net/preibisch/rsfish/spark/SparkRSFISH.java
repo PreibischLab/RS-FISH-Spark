@@ -279,6 +279,7 @@ public class SparkRSFISH implements Callable<Void>
 				}
 			}
 			HelperFunctions.headless = true;
+			@SuppressWarnings({"unchecked", "rawtypes"})
 			List<double[]> points = Radial_Symmetry.runRSFISH(
 					(RandomAccessible)Views.extendMirrorSingle( img3D ),
 					new FinalInterval(minCoords, maxCoords),
