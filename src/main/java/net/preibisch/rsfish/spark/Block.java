@@ -2,6 +2,7 @@ package net.preibisch.rsfish.spark;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import net.imglib2.FinalInterval;
@@ -16,10 +17,10 @@ public class Block implements Serializable
 	 */
 	private static final long serialVersionUID = 9068252106055534926L;
 
-	final long[] min, max;
-	final int id;
+	private final long[] min, max;
+	private final int id;
 
-	public Block( final int id, final long[] min, final long[] max )
+	private Block( final int id, final long[] min, final long[] max )
 	{
 		this.min = min;
 		this.max = max;
@@ -27,14 +28,22 @@ public class Block implements Serializable
 	}
 
 	public long[] min() { return min; }
-	public long[] max() { return max; }
-	public int id() { return id; }
-	public FinalInterval createInterval()
-	{
-		return new FinalInterval( min, max );
-	}
 
-	public static ArrayList< Block > splitIntoBlocks( final Interval interval, final int[] blockSize )
+	public long[] max() { return max; }
+
+	public long[] minCoords() { return min.length > 3 ? Arrays.copyOf(min, 3) : min; }
+
+	public long[] maxCoords() { return max.length > 3 ? Arrays.copyOf(max, 3) : max; }
+
+	public int id() { return id; }
+
+	public FinalInterval createInterval() { return new FinalInterval( min, max ); }
+
+	public int numDimensions() { return min.length; }
+
+
+
+	public static ArrayList< Block > splitIntoBlocks( final Interval interval, final int[] blockSize, final int overlap )
 	{
 		if ( blockSize.length != interval.numDimensions() )
 			throw new RuntimeException( "Mismatch between interval dimension and blockSize length." );
@@ -58,8 +67,8 @@ public class Block implements Serializable
 				max.add( pos + Math.min( bs - 1, interval.max( d ) - pos ) );
 
 				if ( d < 3 )
-					// overlap spatial positions
-					pos += bs - 2; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG
+					// overlap only spatial positions
+					pos += bs - overlap; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG
 				else
 					// no need to overlap channel and timeindex
 					pos += bs;
@@ -100,7 +109,8 @@ public class Block implements Serializable
 						new long[] { 0, 0, 0, 1, 0 },
 						new long[] { 566, 468, 145, 1, 0 }
 				),
-				new int[] { 128, 128, 64, 1, 1 }
+				new int[] { 128, 128, 64, 1, 1 },
+				2
 		);
 
 		if ( blocks.isEmpty() )

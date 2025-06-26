@@ -17,8 +17,11 @@ import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.google.common.io.CharStreams;
+import net.preibisch.rsfish.spark.Block;
+import net.preibisch.rsfish.spark.CSVUtils;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.commons.io.FilenameUtils;
+import scala.Tuple2;
 
 import java.io.File;
 import java.io.IOException;
@@ -67,7 +70,6 @@ public class S3Utils {
         try (Reader reader = new InputStreamReader(objectData)) {
             text = CharStreams.toString(reader);
         }
-//        System.out.println(text.replace("\n"," "));
         objectData.close();
         byte[] bytes = StringUtils.getBytesUsAscii(text);
 
@@ -142,10 +144,10 @@ public class S3Utils {
         return result;
     }
 
-    public static void savePoints(AmazonS3 s3, ArrayList<double[]> allPoints, String output) throws InterruptedException {
+    public static void savePoints(AmazonS3 s3, List<Tuple2<Block, List<double[]>>> allPointsByBlocks, String output) throws InterruptedException {
         AmazonS3URI s3uri = new AmazonS3URI(output);
         String localFile = new File(s3uri.getKey()).getAbsolutePath();
-        CSVUtils.writeCSV(allPoints, localFile);
+        CSVUtils.writeCSV(allPointsByBlocks, localFile);
         //save output to s3
         S3Utils.uploadFile(s3, new File(localFile), s3uri);
     }
@@ -154,7 +156,6 @@ public class S3Utils {
         return new File(new AmazonS3URI(uri).getKey()).getName();
 
     }
-
 
 }
 

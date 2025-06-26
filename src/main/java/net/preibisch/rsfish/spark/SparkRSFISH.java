@@ -1,6 +1,5 @@
 package net.preibisch.rsfish.spark;
 
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -17,7 +16,6 @@ import org.janelia.saalfeldlab.n5.hdf5.N5HDF5Reader;
 import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 import org.janelia.saalfeldlab.n5.zarr.N5ZarrReader;
 
-import benchmark.TextFileAccess;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -41,12 +39,6 @@ public class SparkRSFISH implements Callable<Void>
 
 	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5/HDF5/ZARR, e.g. -d 'embryo_5_ch0/c0/s0'")
 	private String dataset = null;
-
-	@Option(names = {"--timeindex"}, required = false, description = "timeindex within an OME-ZARR dataset")
-	private int timeindex = -1;
-
-	@Option(names = {"-c", "--channel"}, required = false, description = "channel within an OME-ZARR dataset")
-	private int channel = -1;
 
 	// output file
 	@Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
@@ -151,12 +143,11 @@ public class SparkRSFISH implements Callable<Void>
 					", storageType " + storageType);
 		}
 
-		System.out.printf("Image: %s:%s => exists: %b\n",
-				image, dataset, blockedFSReader.datasetExists(dataset));
+		System.out.printf("Image: %s:%s => exists: %b\n", image, dataset, blockedFSReader.datasetExists(dataset));
 		final DatasetAttributes att = blockedFSReader.getDatasetAttributes( dataset );
 		final long[] dimensions = att.getDimensions();
 
-		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %s\n", att.getNumDimensions() );
+		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %d\n", att.getNumDimensions() );
 		System.out.printf( "N5/HDF5/ZARR dataset size: %s (%s)\n", Util.printCoordinates( dimensions ), dimensions);
 
 		minInterval = new long[ att.getNumDimensions() ];
@@ -170,20 +161,6 @@ public class SparkRSFISH implements Callable<Void>
 		else
 			for ( int d = 0; d < maxInterval.length; ++d )
 				maxInterval[ d ] = dimensions[ d ] - 1;
-
-		if (att.getNumDimensions() > 3 ) {
-			if ( this.channel >= 0 ) {
-				this.minInterval[3] = this.channel;
-				this.maxInterval[3] = this.channel;
-			}
-		}
-
-		if (att.getNumDimensions() > 4 ) {
-			if ( this.timeindex >= 0 ) {
-				this.minInterval[4] = this.timeindex;
-				this.maxInterval[4] = this.timeindex;
-			}
-		}
 
 		final Interval interval = new FinalInterval(minInterval, maxInterval);
 
@@ -255,17 +232,14 @@ public class SparkRSFISH implements Callable<Void>
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
-		System.out.printf("Split %s interval into %d %s blocks\n", interval, blocks.size(), Arrays.toString(blockSize));
-
-		for (Block b : blocks) {
-			System.out.println( "!!!!! BLOCK " + b );
-		}
+		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize, 2 );
+		System.out.printf("Split %s interval into %d %s blocks\n", Util.printInterval(interval), blocks.size(), Arrays.toString(blockSize));
 
 		final String imageName = image;
 		final String datasetName = dataset;
-		final long[] min = minInterval.clone();
-		final long[] max = maxInterval.clone();
+		// RS-FISH only supports up to 3D so we only need min and max spatial coordinates for processing
+		final long[] minCoords = minInterval.length > 3 ? Arrays.copyOf(minInterval, 3) : minInterval.clone();
+		final long[] maxCoords = maxInterval.length > 3 ? Arrays.copyOf(maxInterval, 3) : maxInterval.clone();
 
 		// do not store local results
 		params.resultsFilePath = "";
@@ -274,28 +248,41 @@ public class SparkRSFISH implements Callable<Void>
 		params.numThreads = 1;
 
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
-		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
+		final JavaPairRDD<Block, List<double[]> > rddResults = rddIds.mapToPair( block -> {
 
 			System.out.println( "Processing block " + block.id() );
 
-			final N5Reader blockedFSReaderLocal;
+			final N5Reader localBlockReader;
 
 			if ( StorageType.N5.equals(storageLocal) )
-				blockedFSReaderLocal = new N5FSReader( imageName );
+				localBlockReader = new N5FSReader(imageName);
 			else if ( StorageType.ZARR.equals(storageLocal) )
-				blockedFSReaderLocal = new N5ZarrReader(imageName);
-			else if ( StorageType.HDF5.equals(storageLocal) )
-				blockedFSReaderLocal = new N5HDF5Reader(imageName);
+				localBlockReader = new N5ZarrReader(imageName);
 			else
-				throw new RuntimeException( "storageType " + storageLocal + " not supported." );
+				// the only left option is HDF5 - otherwise an exception would have been thrown earlier
+				localBlockReader = new N5HDF5Reader(imageName);
 
-			final RandomAccessibleInterval img = N5Utils.open( blockedFSReaderLocal, datasetName );
+			final RandomAccessibleInterval<?> img = N5Utils.open( localBlockReader, datasetName );
 
+			System.out.printf(
+					"Read block %s from %s image\n",
+					Util.printInterval(block.createInterval()), Util.printInterval(img)
+			);
+
+			// RS-FISH only supports 3D images so if image is >3D take a 3D slice
+			RandomAccessibleInterval<?> img3D = img;
+			if ( img.numDimensions() > 3 ) {
+				// I assume the channel and timepoint block dimensions are just 1,
+				// so I am getting the corresponding spatial 3D hyperslice
+				for (int d = img.numDimensions() - 1; d >= 3; d--) {
+					img3D = Views.hyperSlice(img3D, d, block.min()[d]);
+				}
+			}
 			HelperFunctions.headless = true;
-			ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
-					(RandomAccessible)(Object)Views.extendMirrorSingle( img ),
-					new FinalInterval(min, max),
-					block.createInterval(),
+			List<double[]> points = Radial_Symmetry.runRSFISH(
+					(RandomAccessible)Views.extendMirrorSingle( img3D ),
+					new FinalInterval(minCoords, maxCoords),
+					new FinalInterval(block.minCoords(), block.maxCoords()),
 					params );
 
 			System.out.println( "block " + block.id() + " found " + points.size() + " spots.");
@@ -305,23 +292,20 @@ public class SparkRSFISH implements Callable<Void>
 
 		rddResults.cache();
 
-		final ArrayList<Tuple2<Block, ArrayList<double[]>> > results = new ArrayList<>();
-		results.addAll( rddResults.collect() );
+        final List<Tuple2<Block, List<double[]>>> results =
+				new ArrayList<>(
+						rddResults
+							.filter(r -> r != null && r._2 != null && !r._2.isEmpty())
+							.collect()
+				);
 
 		sc.close();
 
-		final ArrayList<double[]> allPoints = new ArrayList<>();
+		if (!results.isEmpty() )  {
+			long spotsCount = results.stream().mapToLong( t -> t._2.size() ).sum();
+			System.out.printf("Write %d points to %s\n", spotsCount, output );
 
-		for ( final Tuple2<Block, ArrayList<double[]>> r : results )
-		{
-			if ( r != null && r._2() != null )
-				allPoints.addAll( r._2() );
-		}
-
-		if (!allPoints.isEmpty() )  {
-			System.out.printf("Write %d points to %s\n", allPoints.size(), output );
-
-			writeCSV( allPoints, output );
+			CSVUtils.writeCSV( results, output );
 		} else {
 			System.out.println( "No points found!" );
 		}
@@ -345,27 +329,6 @@ public class SparkRSFISH implements Callable<Void>
 		return true;
 	}
 
-	public static void writeCSV( final ArrayList<double[]> points, final String file )
-	{
-		PrintWriter out = TextFileAccess.openFileWrite( file );
-
-		if ( points.get( 0 ).length == 4 )
-			out.println("x,y,z,t,c,intensity");
-		else
-			out.println("x,y,t,c,intensity");
-
-		for (double[] spot : points) {
-			for (int d = 0; d < spot.length - 1; ++d)
-				out.print( String.format(java.util.Locale.US, "%.4f", spot[ d ] ) + "," );
-
-			out.print( "1,1," );
-
-			out.println(String.format(java.util.Locale.US, "%.4f", spot[ spot.length - 1 ] ) );
-		}
-
-		System.out.println(points.size() + " spots written to " + file );
-		out.close();
-	}
 
 	// taken from: hot-knife repository (Saalfeld)
 	protected static final boolean parseCSLongArray(final String csv, final long[] array) {
