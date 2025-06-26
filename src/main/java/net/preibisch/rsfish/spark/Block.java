@@ -41,8 +41,6 @@ public class Block implements Serializable
 
 	public int numDimensions() { return min.length; }
 
-
-
 	public static ArrayList< Block > splitIntoBlocks( final Interval interval, final int[] blockSize, final int overlap )
 	{
 		if ( blockSize.length != interval.numDimensions() )
