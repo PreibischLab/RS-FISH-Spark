@@ -12,9 +12,9 @@ The code to run the distributed, [Spark](http://spark.apache.org)-based RS-FISH 
 ### Local execution <a name="local">
 </a> 
 
-For **local execution** (comparable to efficient multi-threading), compile the repository using `mvn clean package`, which will create a **farjar** in the target directory called `RS-Fish-jar-with-dependencies.jar`. You can then execute the [RS-FISH class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH.java) (for large volumes) or the [RS-FISH-IJ class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH_IJ.java) (for many smaller images), for example:
+For **local execution** (comparable to efficient multi-threading), compile the repository using `mvn clean package`, which will create a **farjar** in the target directory called `RS-FISH-Spark-0.0.2-SNAPSHOT-with-dependencies.jar`. You can then execute the [RS-FISH class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH.java) (for large volumes) or the [RS-FISH-IJ class](https://github.com/PreibischLab/RS-FISH-Spark/blob/main/src/main/java/net/preibisch/rsfish/spark/SparkRSFISH_IJ.java) (for many smaller images), for example:
 
-`java -cp target/RS-Fish-jar-with-dependencies.jar -Xmx20G -Dspark.master=local[8] net.preibisch.rsfish.spark.SparkRSFISH --image=/home/test.n5 --dataset=/N2/s0 --minIntensity=0 --maxIntensity=4096 --anisotropy=0.7 --output=points.csv`
+`java -cp target/RS-FISH-Spark-0.0.2-SNAPSHOT-with-dependencies.jar -Xmx20G -Dspark.master=local[8] net.preibisch.rsfish.spark.SparkRSFISH --image=/home/test.n5 --dataset=/N2/s0 --minIntensity=0 --maxIntensity=4096 --anisotropy=0.7 --output=points.csv`
 
 *Alternatively, you can import the project into Eclipse and run it from there.*
 
@@ -121,7 +121,7 @@ Click on Create cluster from the EMR dashboard.
 * Spark-submit options: --class
 * for N5 input: net.preibisch.rsfish.spark.aws.AWSSparkRSFISH
 * For multiple tifs: net.preibisch.rsfish.spark.aws.RunAWSSparkRSFISHIJ
-* Application location*: s3://preibischlab-release-jars/RS-Fish-jar-with-dependencies.jar
+* Application location*: s3://preibischlab-release-jars/RS-FISH-Spark-0.0.2-SNAPSHOT-with-dependencies.jar
 * Arguments: minimum task arguments for default params:
   -i =< N5 container path in s3, e.g. -i s3://bucket-name/smFish.n5 -o, --output= output CSV file in S3, e.g. -o s3://rs-fish/embryo_5_ch0.csv -p, --path= The path of the input Data inside bucket e.g. -p N2-702-ch0/c0/s0 -pk, --publicKey= User public key (*previously created) -pp, --privateKey= User private key
 
