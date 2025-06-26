@@ -250,7 +250,7 @@ public class SparkRSFISH implements Callable<Void>
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 		final JavaPairRDD<Block, List<double[]> > rddResults = rddIds.mapToPair( block -> {
 
-			System.out.println( "Processing block " + block.id() );
+			System.out.println( "Processing block " + block.id() + ":" + Util.printInterval(block.createInterval()));
 
 			final N5Reader localBlockReader;
 
@@ -286,7 +286,10 @@ public class SparkRSFISH implements Callable<Void>
 					new FinalInterval(block.minCoords(), block.maxCoords()),
 					params );
 
-			System.out.println( "block " + block.id() + " found " + points.size() + " spots.");
+			System.out.println(
+					"Block " + block.id() + ":" + Util.printInterval(block.createInterval()) +
+					" found " + points.size() + " spots."
+			);
 
 			return new Tuple2<>(block, points );
 		});
