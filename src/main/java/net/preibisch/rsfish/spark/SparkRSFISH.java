@@ -293,7 +293,8 @@ public class SparkRSFISH implements Callable<Void>
 
 		rddResults.cache();
 
-        final List<Tuple2<Block, List<double[]>>> results =
+		// filter out block results that do not have any points
+		final List<Tuple2<Block, List<double[]>>> results =
 				new ArrayList<>(
 						rddResults
 							.filter(r -> r != null && r._2 != null && !r._2.isEmpty())
