@@ -12,7 +12,9 @@ public class CSVUtils {
         PrintWriter out = TextFileAccess.openFileWrite( file );
 
         // output CSV header
-        if ( allPointsByBlocks.get( 0 )._2.size() == 4 )
+        if ( allPointsByBlocks.get( 0 )._2.get(0).length == 4 )
+            // if the condition throws an IndexOutOfBounds exception something is really wrong
+            // because allPointsByBlocks should only have blocks that have spots
             out.println("x,y,z,t,c,intensity");
         else
             out.println("x,y,t,c,intensity");
