@@ -2,6 +2,8 @@ package net.preibisch.rsfish.spark;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 import org.apache.spark.SparkConf;
@@ -40,11 +42,17 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5/HDF5/ZARR, e.g. -d 'embryo_5_ch0/c0/s0'")
 	private String dataset = null;
 
+	@Option(names = {"--timeindex"}, required = false, description = "timeindex within an OME-ZARR dataset")
+	private int timeindex = -1;
+
+	@Option(names = {"-c", "--channel"}, required = false, description = "channel within an OME-ZARR dataset")
+	private int channel = -1;
+
 	// output file
 	@Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
 	private String output = null;
 
-	@Option(names = {"--storage"}, defaultValue = "N5", required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
+	@Option(names = {"--storage"}, required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
 	private StorageType storageType = null;
 
 	// processing options
@@ -119,32 +127,63 @@ public class SparkRSFISH implements Callable<Void>
 	{
 		final N5Reader blockedFSReader;
 
-		if ( StorageType.N5.equals(storageType) )
-			blockedFSReader = new N5FSReader( image );
-		else if ( StorageType.ZARR.equals(storageType) )
-			blockedFSReader = new N5ZarrReader(image);
-		else if ( StorageType.HDF5.equals(storageType) )
-			blockedFSReader = new N5HDF5Reader(image);
-		else
-			throw new RuntimeException( "storageType " + storageType + " not supported." );
+		// the enum needs to be final to be serializable
+		final StorageType storageLocal;
 
+		if ( StorageType.N5.equals(storageType) ||
+			image.toLowerCase().endsWith(".n5") ) {
+			System.out.printf("Instantiate N5 FS reader for %s\n", image);
+			storageLocal = StorageType.N5;
+			blockedFSReader = new N5FSReader(image);
+		} else if ( StorageType.ZARR.equals(storageType) ||
+					image.toLowerCase().endsWith(".zarr") ) {
+			System.out.printf("Instantiate ZARR reader for %s\n", image);
+			storageLocal = StorageType.ZARR;
+			blockedFSReader = new N5ZarrReader(image);
+		} else if ( StorageType.HDF5.equals(storageType) ||
+					image.toLowerCase().endsWith(".hdf5") ||
+					image.toLowerCase().endsWith(".h5") ) {
+			System.out.printf("Instantiate HDF5 reader for %s\n", image);
+			storageLocal = StorageType.HDF5;
+			blockedFSReader = new N5HDF5Reader(image);
+		} else {
+			throw new IllegalArgumentException("Unsupported storage " + image +
+					", storageType " + storageType);
+		}
+
+		System.out.printf("Image: %s:%s => exists: %b\n",
+				image, dataset, blockedFSReader.datasetExists(dataset));
 		final DatasetAttributes att = blockedFSReader.getDatasetAttributes( dataset );
 		final long[] dimensions = att.getDimensions();
 
-		System.out.println( "N5/HDF5/ZARR dataset dimensionality: " + att.getNumDimensions() );
-		System.out.println( "N5/HDF5/ZARR dataset size: " + Util.printCoordinates( dimensions ));
+		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %s\n", att.getNumDimensions() );
+		System.out.printf( "N5/HDF5/ZARR dataset size: %s (%s)\n", Util.printCoordinates( dimensions ), dimensions);
 
-		this.minInterval = new long[ att.getNumDimensions() ];
-		this.maxInterval = new long[ att.getNumDimensions() ];
+		minInterval = new long[ att.getNumDimensions() ];
+		maxInterval = new long[ att.getNumDimensions() ];
 
 		if ( this.min != null )
 			parseCSLongArray( min, minInterval );
 
 		if ( this.max != null )
-			parseCSLongArray( max, maxInterval );
+			parseCSLongArray(max, maxInterval);
 		else
 			for ( int d = 0; d < maxInterval.length; ++d )
-				this.maxInterval[ d ] = dimensions[ d ] - 1;
+				maxInterval[ d ] = dimensions[ d ] - 1;
+
+		if (att.getNumDimensions() > 3 ) {
+			if ( this.channel >= 0 ) {
+				this.minInterval[3] = this.channel;
+				this.maxInterval[3] = this.channel;
+			}
+		}
+
+		if (att.getNumDimensions() > 4 ) {
+			if ( this.timeindex >= 0 ) {
+				this.minInterval[4] = this.timeindex;
+				this.maxInterval[4] = this.timeindex;
+			}
+		}
 
 		final Interval interval = new FinalInterval(minInterval, maxInterval);
 
@@ -154,8 +193,13 @@ public class SparkRSFISH implements Callable<Void>
 		{
 			if ( att.getNumDimensions() == 2 )
 				this.blockSize = defaultBlockSize2d.clone();
-			else
+			else if (att.getNumDimensions() == 3 )
 				this.blockSize = defaultBlockSize3d.clone();
+			else {
+				this.blockSize = new int[ att.getNumDimensions() ];
+				Arrays.fill(this.blockSize, 1);
+				System.arraycopy(defaultBlockSize3d, 0, this.blockSize, 0, defaultBlockSize3d.length);
+			}
 		}
 		else
 		{
@@ -207,11 +251,16 @@ public class SparkRSFISH implements Callable<Void>
 		params.resultsFilePath = output;
 
 		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
-		//sparkConf.set("spark.driver.bindAddress", "127.0.0.1");
+
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-		final ArrayList< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
+		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize );
+		System.out.printf("Split %s interval into %d %s blocks\n", interval, blocks.size(), Arrays.toString(blockSize));
+
+		for (Block b : blocks) {
+			System.out.println( "!!!!! BLOCK " + b );
+		}
 
 		final String imageName = image;
 		final String datasetName = dataset;
@@ -223,9 +272,6 @@ public class SparkRSFISH implements Callable<Void>
 
 		// single-threaded within each block
 		params.numThreads = 1;
-
-		// the enum needs to be final to be serializable
-		final StorageType storageLocal = storageType;
 
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 		final JavaPairRDD<Block, ArrayList<double[]> > rddResults = rddIds.mapToPair( block -> {
@@ -272,9 +318,13 @@ public class SparkRSFISH implements Callable<Void>
 				allPoints.addAll( r._2() );
 		}
 
-		System.out.println( "total points: " + allPoints.size() );
+		if (!allPoints.isEmpty() )  {
+			System.out.printf("Write %d points to %s\n", allPoints.size(), output );
 
-		writeCSV( allPoints, output );
+			writeCSV( allPoints, output );
+		} else {
+			System.out.println( "No points found!" );
+		}
 
 		return null;
 	}

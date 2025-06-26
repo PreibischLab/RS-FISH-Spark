@@ -52,12 +52,17 @@ public class Block implements Serializable
 			long bs = blockSize[ d ];
 			long pos = interval.min( d );
 
-			while ( pos < interval.max( d ) - 1 )
+			while ( pos < interval.max( d ) + 1 )
 			{
 				min.add( pos );
 				max.add( pos + Math.min( bs - 1, interval.max( d ) - pos ) );
 
-				pos += bs - 2; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG 
+				if ( d < 3 )
+					// overlap spatial positions
+					pos += bs - 2; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG
+				else
+					// no need to overlap channel and timeindex
+					pos += bs;
 				++numBlocks[ d ];
 			}
 
@@ -90,9 +95,18 @@ public class Block implements Serializable
 
 	public static void main( String[] args )
 	{
-		ArrayList< Block > blocks = splitIntoBlocks( new FinalInterval( new long[] { 19, -5 }, new long[] { 1000, 100 } ), new int[] { 100, 100 } );
+		ArrayList< Block > blocks = splitIntoBlocks(
+				new FinalInterval(
+						new long[] { 0, 0, 0, 1, 0 },
+						new long[] { 566, 468, 145, 1, 0 }
+				),
+				new int[] { 128, 128, 64, 1, 1 }
+		);
 
-		for ( final Block b : blocks )
-			System.out.println( Util.printInterval( b.createInterval() ) );
+		if ( blocks.isEmpty() )
+			System.out.println( "No blocks found" );
+		else
+			for ( final Block b : blocks )
+				System.out.println( Util.printInterval( b.createInterval() ) );
 	}
 }
