@@ -3,7 +3,9 @@ package net.preibisch.rsfish.spark;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
@@ -71,6 +73,9 @@ public class SparkRSFISH implements Callable<Void>
 
 	@Option(names = "--max-channel", description = "Max channel (exclusive). If value < 0 it is not used.")
 	private int maxChannel = -1;
+
+	@Option(names = {"--excluded-channels"}, split = ",", description = "Comma-separated list of (0-based) channel values")
+	private Set<Integer> excludedChannels;
 
 	@Option(names = "--min-timeindex", description = "Min timeindex (inclusive). If value < 0 it is not used.")
 	private int minTimeIndex = -1;
@@ -261,7 +266,9 @@ public class SparkRSFISH implements Callable<Void>
 				startTimeIndex, endTimeIndex, startChannel, endChannel);
 		for (int t = startTimeIndex; t < endTimeIndex; t++) {
 			for (int c = startChannel; c < endChannel; c++) {
-
+				if (excludedChannels != null && excludedChannels.contains(c) ) {
+					continue; // skip this channel
+				}
 				// process spatial blocks for the current timepoint and channel
 				List<double[]> blockResults = processBlocks(
 						image, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageFormat, blocks, params, sc
