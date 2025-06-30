@@ -1,21 +1,14 @@
 package net.preibisch.rsfish.spark;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.janelia.saalfeldlab.n5.DatasetAttributes;
-import org.janelia.saalfeldlab.n5.N5FSReader;
-import org.janelia.saalfeldlab.n5.N5Reader;
-import org.janelia.saalfeldlab.n5.hdf5.N5HDF5Reader;
-import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
-import org.janelia.saalfeldlab.n5.zarr.N5ZarrReader;
-
+import benchmark.TextFileAccess;
+import com.google.gson.GsonBuilder;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -24,6 +17,20 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.janelia.saalfeldlab.n5.DatasetAttributes;
+import org.janelia.saalfeldlab.n5.N5Reader;
+import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
+import org.janelia.saalfeldlab.n5.universe.N5Factory;
+import org.janelia.saalfeldlab.n5.universe.StorageFormat;
+import org.janelia.saalfeldlab.n5.universe.metadata.axes.Axis;
+import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.OmeNgffMultiScaleMetadata;
+import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.coordinateTransformations.CoordinateTransformation;
+import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.coordinateTransformations.CoordinateTransformationAdapter;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
@@ -31,8 +38,6 @@ import scala.Tuple2;
 
 public class SparkRSFISH implements Callable<Void>
 {
-	public enum StorageType { N5, ZARR, HDF5 }
-
 	// input file
 	@Option(names = {"-i", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
 	private String image = null;
@@ -45,7 +50,7 @@ public class SparkRSFISH implements Callable<Void>
 	private String output = null;
 
 	@Option(names = {"--storage"}, required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
-	private StorageType storageType = null;
+	private StorageFormat storageFormat = null;
 
 	// processing options
 	@Option(names = "--blockSize", required = false, description = "Blocksize for processing, e.g. 128,128,64 or 512,512 (default: as listed under e.g.)")
@@ -117,41 +122,41 @@ public class SparkRSFISH implements Callable<Void>
 	@Override
 	public Void call() throws Exception
 	{
-		final N5Reader blockedFSReader;
+		final N5Factory n5Factory = new N5Factory();
+		// configure N5 factory
+		n5Factory.gsonBuilder(new GsonBuilder().registerTypeAdapter(
+				CoordinateTransformation.class,
+				new CoordinateTransformationAdapter() )
+		);
+		n5Factory.preferredStorageFormat(storageFormat);
 
-		// the enum needs to be final to be serializable
-		final StorageType storageLocal;
+		N5Reader n5AttrsReader = n5Factory.openReader(image);
 
-		if ( StorageType.N5.equals(storageType) ||
-			image.toLowerCase().endsWith(".n5") ) {
-			System.out.printf("Instantiate N5 FS reader for %s\n", image);
-			storageLocal = StorageType.N5;
-			blockedFSReader = new N5FSReader(image);
-		} else if ( StorageType.ZARR.equals(storageType) ||
-					image.toLowerCase().endsWith(".zarr") ) {
-			System.out.printf("Instantiate ZARR reader for %s\n", image);
-			storageLocal = StorageType.ZARR;
-			blockedFSReader = new N5ZarrReader(image);
-		} else if ( StorageType.HDF5.equals(storageType) ||
-					image.toLowerCase().endsWith(".hdf5") ||
-					image.toLowerCase().endsWith(".h5") ) {
-			System.out.printf("Instantiate HDF5 reader for %s\n", image);
-			storageLocal = StorageType.HDF5;
-			blockedFSReader = new N5HDF5Reader(image);
-		} else {
-			throw new IllegalArgumentException("Unsupported storage " + image +
-					", storageType " + storageType);
-		}
+		System.out.printf("Image: %s:%s => exists: %b\n", image, dataset, n5AttrsReader.datasetExists(dataset));
+		final RandomAccessibleInterval<?> img = N5Utils.open( n5AttrsReader, dataset );
 
-		System.out.printf("Image: %s:%s => exists: %b\n", image, dataset, blockedFSReader.datasetExists(dataset));
-		final DatasetAttributes att = blockedFSReader.getDatasetAttributes( dataset );
-		final long[] dimensions = att.getDimensions();
+		String[] datasetComps = dataset.split("/");
+		String datasetParent;
+		if (datasetComps.length <= 1)
+			datasetParent = "";
+		else
+			datasetParent = String.join("/", Arrays.copyOf(datasetComps, datasetComps.length - 1));
 
-		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %d\n", att.getNumDimensions() );
-		System.out.printf( "N5/HDF5/ZARR dataset size: %s (%s)\n", Util.printCoordinates( dimensions ), dimensions);
 
-		minInterval = new long[ att.getNumDimensions() ];
-		maxInterval = new long[ att.getNumDimensions() ];
+		final long[] datasetDimensions = n5AttrsReader.getDatasetAttributes(dataset).getDimensions();
+
+		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %d\n", datasetDimensions.length );
+		System.out.printf( "N5/HDF5/ZARR dataset size: %s (%s)\n", Util.printCoordinates( datasetDimensions ), datasetDimensions);
+
+		OmeNgffMultiScaleMetadata[] multiscales = n5AttrsReader.getAttribute(
+				datasetParent, "multiscales", OmeNgffMultiScaleMetadata[].class
+		);
+
+		final Tuple2<int[], long[]> imageDimensions = getImageDimensions(multiscales, datasetDimensions);
+
+		int nDims = imageDimensions._1.length - 2;
+		minInterval = new long[ nDims ]; // only allocate interval for spatial dimensions
+		maxInterval = new long[ nDims ];
 
 		if ( this.min != null )
 			parseCSLongArray( min, minInterval );
@@ -159,28 +164,20 @@ public class SparkRSFISH implements Callable<Void>
 		if ( this.max != null )
 			parseCSLongArray(max, maxInterval);
 		else
-			for ( int d = 0; d < maxInterval.length; ++d )
-				maxInterval[ d ] = dimensions[ d ] - 1;
+			for ( int d = 0; d < nDims; ++d )
+				maxInterval[ d ] = imageDimensions._2[2 + d] - 1;
 
 		final Interval interval = new FinalInterval(minInterval, maxInterval);
 
 		System.out.println( "Processing interval: " + Util.printInterval( interval ));
 
-		if ( this.blockSizeString == null )
-		{
-			if ( att.getNumDimensions() == 2 )
+		if ( this.blockSizeString == null ) {
+			if ( nDims == 2 )
 				this.blockSize = defaultBlockSize2d.clone();
-			else if (att.getNumDimensions() == 3 )
+			else
 				this.blockSize = defaultBlockSize3d.clone();
-			else {
-				this.blockSize = new int[ att.getNumDimensions() ];
-				Arrays.fill(this.blockSize, 1);
-				System.arraycopy(defaultBlockSize3d, 0, this.blockSize, 0, defaultBlockSize3d.length);
-			}
-		}
-		else
-		{
-			this.blockSize = new int[ att.getNumDimensions() ];
+		} else {
+			this.blockSize = new int[ nDims ];
 			parseCSIntArray( blockSizeString, blockSize );
 		}
 
@@ -194,22 +191,18 @@ public class SparkRSFISH implements Callable<Void>
 		params.useAnisotropyForDoG = true;
 		params.ransacSelection = ransac; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
 
-		if ( minIntensity == maxIntensity )
-		{
+		if ( minIntensity == maxIntensity ) {
 			params.min = Double.NaN;
 			params.max = Double.NaN;
 			params.autoMinMax = true;
-		}
-		else
-		{
+		} else {
 			params.min = minIntensity;
 			params.max = maxIntensity;
 			params.autoMinMax = false;
 		}
 
 		// multiconsensus
-		if ( ransac == 2 )
-		{
+		if ( ransac == 2 ) {
 			params.minNumInliers = ransacMinNumInliers;
 			params.nTimesStDev1 = ransacNTimesStDev1;
 			params.nTimesStDev2 = ransacNTimesStDev2;
@@ -231,15 +224,11 @@ public class SparkRSFISH implements Callable<Void>
 
 		final JavaSparkContext sc = new JavaSparkContext( sparkConf );
 
+		// RS-FISH only supports up to 3D so we only need min and max spatial coordinates for processing
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize, 2 );
+		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize);
 		System.out.printf("Split %s interval into %d %s blocks\n", Util.printInterval(interval), blocks.size(), Arrays.toString(blockSize));
 
-		final String imageName = image;
-		final String datasetName = dataset;
-		// RS-FISH only supports up to 3D so we only need min and max spatial coordinates for processing
-		final long[] minCoords = minInterval.length > 3 ? Arrays.copyOf(minInterval, 3) : minInterval.clone();
-		final long[] maxCoords = maxInterval.length > 3 ? Arrays.copyOf(maxInterval, 3) : maxInterval.clone();
 
 		// do not store local results
 		params.resultsFilePath = "";
@@ -247,21 +236,141 @@ public class SparkRSFISH implements Callable<Void>
 		// single-threaded within each block
 		params.numThreads = 1;
 
+		final List<double[]> results = new ArrayList<>();
+
+		for (int t = 0; t < imageDimensions._2[0]; t++) {
+			final int timeaxis = imageDimensions._1[0];
+			for (int c = 0; c < imageDimensions._2[1]; c++) {
+				final int channelaxis = imageDimensions._1[1];
+
+				// process spatial blocks for the current timepoint and channel
+				List<double[]> blockResults = processBlocks(
+						image, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageFormat, blocks, params, sc
+				);
+				results.addAll( blockResults );
+			}
+		}
+
+		sc.close();
+
+		if (!results.isEmpty() )  {
+			System.out.printf("Write %d points to %s\n", results.size(), output );
+
+			writeCSV( results, nDims, output );
+		} else {
+			System.out.println( "No points found!" );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get image dimensions as a tuple of 2 arrays. The first array has the axis position and the second
+	 * array has the actual dimension. The first 2 positions are reserved for the time (0) and channel (1) values
+	 * respectively even if these are not present in the dataset. If the time or channel is not present the
+	 * corresponding axis position is -1.
+	 * @param multiscales
+	 * @param datasetDimensions
+	 * @return
+	 */
+	private Tuple2<int[], long[]> getImageDimensions(OmeNgffMultiScaleMetadata[] multiscales, long[] datasetDimensions) {
+		OmeNgffMultiScaleMetadata multiScaleMetadata = multiscales != null && multiscales.length > 0 ? multiscales[0] : null;
+		if (multiScaleMetadata == null) {
+			// no OME-NGFF
+			return getNotNGFFImageDimensions(datasetDimensions);
+		} else {
+			return getNGFFImageDimensions(multiScaleMetadata, datasetDimensions);
+		}
+	}
+
+	private Tuple2<int[], long[]> getNotNGFFImageDimensions(long[] datasetDimensions) {
+		if (datasetDimensions.length > 3) {
+			// if array.ndim > 3 then it must be OME-NGFF
+			throw new IllegalArgumentException("Higher than 3D array require OME-NGFF metadata which is not set for " + dataset);
+		}
+		int[] axesPos = new int[2 + datasetDimensions.length];
+		long[] dimensions = new long[2 + datasetDimensions.length];
+		// timepoints and channels are not set
+		axesPos[0] = -1;
+		axesPos[1] = -1;
+		// but consider the dimension to be 1
+		dimensions[0] = 1;
+		dimensions[1] = 1;
+		for (int i = 0; i < datasetDimensions.length; i++) {
+			axesPos[i + 2] = i;
+			dimensions[i + 2] = datasetDimensions[i];
+		}
+		return new Tuple2<>(axesPos, dimensions);
+	}
+
+	private Tuple2<int[], long[]> getNGFFImageDimensions(OmeNgffMultiScaleMetadata multiScaleMetadata, long[] datasetDimensions) {
+		// OME-NGFF metadata is present
+		Axis[] datasetAxes = multiScaleMetadata.getAxes();
+		if (datasetAxes == null || datasetAxes.length != datasetDimensions.length) {
+			throw new IllegalArgumentException("Invalid OME attributes - the number of axes and the array dimensions for " + dataset + " are different");
+		}
+		int nAxes = datasetAxes.length;
+		int[] timeAndChannelAxis = new int[] { -1, -1 };
+		long[] timeAndChannelDims = new long[] { 1L, 1L };
+		int[] spatialAxes = new int[datasetAxes.length];
+		long[] spatialDimensions = new long[datasetDimensions.length];
+		int nspatialDimensions = 0;
+		for (int ai = datasetAxes.length -1; ai >= 0; ai--) {
+			switch (datasetAxes[ai].getType()) {
+				case Axis.TIME:
+					timeAndChannelAxis[0] = nAxes - ai - 1;
+					timeAndChannelDims[0] = datasetDimensions[nAxes - ai - 1];
+					break;
+				case Axis.CHANNEL:
+					timeAndChannelAxis[1] = nAxes - ai - 1;
+					timeAndChannelDims[1] = datasetDimensions[nAxes - ai - 1];
+					break;
+				case Axis.SPACE:
+					// do not revert spatial axes
+					spatialAxes[nspatialDimensions] = nAxes - ai - 1;
+					spatialDimensions[nspatialDimensions] = datasetDimensions[nAxes - ai - 1];
+					nspatialDimensions++;
+					break;
+				default:
+					// don't know if I need to do anything for other axes types => simply continue
+					break;
+			}
+		}
+		int[] axesPos = new int[2 + nspatialDimensions];
+		long[] dimensions = new long[2 + nspatialDimensions];
+		for (int i = 0; i < 2; i ++) {
+			axesPos[i] = timeAndChannelAxis[i];
+			dimensions[i] = timeAndChannelDims[i];
+		}
+		for (int i = 0; i < nspatialDimensions; i ++) {
+			axesPos[i + 2] = spatialAxes[i];
+			dimensions[i + 2] = spatialDimensions[i];
+		}
+		return new Tuple2<>(axesPos, dimensions);
+	}
+
+	private List<double[]> processBlocks(
+			String imageUri, String datasetName,
+			int timeindex, int timeAxis,
+			int channel, int channelAxis,
+			long[] minInterval,
+			long[] maxInterval,
+			StorageFormat storageFormat,
+			List<Block> blocks,
+			RadialSymParams params,
+			JavaSparkContext sc) {
+
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
+
 		final JavaPairRDD<Block, List<double[]> > rddResults = rddIds.mapToPair( block -> {
 
-			System.out.println( "Processing block " + block.id() + ":" + Util.printInterval(block.createInterval()));
+			System.out.printf( "Processing block %d:%d:%s (%s)\n",
+					timeindex, channel, block.id(), Util.printInterval(block.createInterval()));
 
-			final N5Reader localBlockReader;
+			N5Factory n5Factory = new N5Factory();
+			n5Factory.preferredStorageFormat(storageFormat);
 
-			if ( StorageType.N5.equals(storageLocal) )
-				localBlockReader = new N5FSReader(imageName);
-			else if ( StorageType.ZARR.equals(storageLocal) )
-				localBlockReader = new N5ZarrReader(imageName);
-			else
-				// the only left option is HDF5 - otherwise an exception would have been thrown earlier
-				localBlockReader = new N5HDF5Reader(imageName);
-
+			final N5Reader localBlockReader = n5Factory.openReader(imageUri);
 			final RandomAccessibleInterval<?> img = N5Utils.open( localBlockReader, datasetName );
 
 			System.out.printf(
@@ -271,55 +380,51 @@ public class SparkRSFISH implements Callable<Void>
 
 			// RS-FISH only supports 3D images so if image is >3D take a 3D slice
 			RandomAccessibleInterval<?> img3D = img;
-			if ( img.numDimensions() > 3 ) {
-				// I assume the channel and timepoint block dimensions are just 1,
-				// so I am getting the corresponding spatial 3D hyperslice
-				for (int d = img.numDimensions() - 1; d >= 3; d--) {
-					img3D = Views.hyperSlice(img3D, d, block.min()[d]);
-				}
+			if ( timeAxis != -1 ) {
+				// there is a time axis
+				img3D = Views.hyperSlice( img3D, timeAxis, timeindex );
+			}
+			if ( channelAxis != -1 ) {
+				// there is a channel axis
+				img3D = Views.hyperSlice( img3D, channelAxis, channel );
 			}
 			HelperFunctions.headless = true;
 			@SuppressWarnings({"unchecked", "rawtypes"})
 			List<double[]> points = Radial_Symmetry.runRSFISH(
 					(RandomAccessible)Views.extendMirrorSingle( img3D ),
-					new FinalInterval(minCoords, maxCoords),
-					new FinalInterval(block.minCoords(), block.maxCoords()),
+					new FinalInterval(minInterval, maxInterval),
+					block.createInterval(),
 					params );
 
 			System.out.println(
 					"Block " + block.id() + ":" + Util.printInterval(block.createInterval()) +
-					" found " + points.size() + " spots."
+							" found " + points.size() + " spots."
 			);
 
-			return new Tuple2<>(block, points );
+			// prepend timeindex and channel to each point
+			List<double[]> pointsWithTimeAndChannel = points.stream()
+					.map(p -> {
+						double[] pWithTimeAndChannel = new double[2 + p.length];
+						pWithTimeAndChannel[0] = timeindex;
+						pWithTimeAndChannel[1] = channel;
+						System.arraycopy(p, 0, pWithTimeAndChannel, 2, p.length);
+						return pWithTimeAndChannel;
+					})
+					.collect(Collectors.toList());
+			return new Tuple2<>(block, pointsWithTimeAndChannel);
 		});
 
 		rddResults.cache();
 
 		// filter out block results that do not have any points
-		final List<Tuple2<Block, List<double[]>>> results =
-				new ArrayList<>(
-						rddResults
-							.filter(r -> r != null && r._2 != null && !r._2.isEmpty())
-							.collect()
-				);
-
-		sc.close();
-
-		if (!results.isEmpty() )  {
-			long spotsCount = results.stream().mapToLong( t -> t._2.size() ).sum();
-			System.out.printf("Write %d points to %s\n", spotsCount, output );
-
-			CSVUtils.writeCSV( results, output );
-		} else {
-			System.out.println( "No points found!" );
-		}
-
-		return null;
+		return rddResults
+				.filter(r -> r != null && r._2 != null && !r._2.isEmpty())
+				.flatMap(r -> r._2.iterator())
+				.collect();
 	}
 
 	// taken from: hot-knife repository (Saalfeld)
-	protected static final boolean parseCSIntArray(final String csv, final int[] array) {
+	private static boolean parseCSIntArray(final String csv, final int[] array) {
 
 		final String[] stringValues = csv.split(",");
 		if (stringValues.length != array.length)
@@ -334,9 +439,8 @@ public class SparkRSFISH implements Callable<Void>
 		return true;
 	}
 
-
 	// taken from: hot-knife repository (Saalfeld)
-	protected static final boolean parseCSLongArray(final String csv, final long[] array) {
+	private static boolean parseCSLongArray(final String csv, final long[] array) {
 
 		final String[] stringValues = csv.split(",");
 		if (stringValues.length != array.length)
@@ -351,7 +455,37 @@ public class SparkRSFISH implements Callable<Void>
 		return true;
 	}
 
-	public static final void main(final String... args) {
+	private static void writeCSV(final List<double[]> allTimeAndChannelPoints, int ndims, final String file) {
+		PrintWriter out = TextFileAccess.openFileWrite( file );
+
+		// output CSV header
+		if ( ndims == 3 )
+			// if the condition throws an IndexOutOfBounds exception something is really wrong
+			// because allPointsByBlocks should only have blocks that have spots
+			out.println("x,y,z,t,c,intensity");
+		else
+			out.println("x,y,t,c,intensity");
+
+		for (double[] spot : allTimeAndChannelPoints) {
+			// output 1-based values for timepoint and channel
+			int timeIndex = (int) spot[0] + 1;
+			int channel = (int) spot[1] + 1;
+
+			// output x,y[,z]
+			for (int d = 2; d < spot.length - 1; ++d)
+				out.print( String.format(java.util.Locale.US, "%.4f", spot[ d ] ) + "," );
+
+			out.printf( "%d,%d,", timeIndex, channel );
+
+			// output intensity
+			out.println(String.format(java.util.Locale.US, "%.4f", spot[ spot.length - 1 ] ) );
+		}
+
+		System.out.println(allTimeAndChannelPoints.size() + " spots written to " + file );
+		out.close();
+	}
+
+	public static void main(final String... args) {
 		System.out.println(String.join(" ",args));
 		new CommandLine( new SparkRSFISH() ).execute( args );
 	}

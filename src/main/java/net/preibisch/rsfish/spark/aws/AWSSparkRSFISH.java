@@ -24,8 +24,6 @@ import picocli.CommandLine.Option;
 import scala.Tuple2;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.Callable;
 
 public class AWSSparkRSFISH implements Callable<Void> {
@@ -151,13 +149,8 @@ public class AWSSparkRSFISH implements Callable<Void> {
         if (this.blockSizeString == null) {
             if ( att.getNumDimensions() == 2 )
                 this.blockSize = defaultBlockSize2d.clone();
-            else if (att.getNumDimensions() == 3 )
+            else
                 this.blockSize = defaultBlockSize3d.clone();
-            else {
-                this.blockSize = new int[ att.getNumDimensions() ];
-                Arrays.fill(this.blockSize, 1);
-                System.arraycopy(defaultBlockSize3d, 0, this.blockSize, 0, defaultBlockSize3d.length);
-            }
         } else {
             this.blockSize = new int[att.getNumDimensions()];
             parseCSIntArray(blockSizeString, blockSize);
@@ -210,13 +203,12 @@ public class AWSSparkRSFISH implements Callable<Void> {
         System.out.println("Version: " + sc.version());
 
         // only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
-        final ArrayList<Block> blocks = Block.splitIntoBlocks(interval, blockSize, 2);
+        final ArrayList<Block> blocks = Block.splitIntoBlocks(interval, blockSize);
 
         final String imageName = image;
         final String datasetName = dataset;
-        // RS-FISH only supports up to 3D so we only need min and max spatial coordinates for processing
-        final long[] minCoords = minInterval.length > 3 ? Arrays.copyOf(minInterval, 3) : minInterval.clone();
-        final long[] maxCoords = maxInterval.length > 3 ? Arrays.copyOf(maxInterval, 3) : maxInterval.clone();
+        final long[] min = minInterval.clone();
+        final long[] max = maxInterval.clone();
 
         // do not store local results
         params.resultsFilePath = "";
@@ -225,28 +217,19 @@ public class AWSSparkRSFISH implements Callable<Void> {
         params.numThreads = 1;
 
         final JavaRDD<Block> rddIds = sc.parallelize(blocks);
-        final JavaPairRDD<Block, List<double[]>> rddResults = rddIds.mapToPair(block -> {
+        final JavaPairRDD<Block, ArrayList<double[]>> rddResults = rddIds.mapToPair(block -> {
 
             System.out.println("Processing block " + block.id());
             // AWS reader
             N5Reader n5reader = n5Supplier.getN5();
+//			final N5Reader n5Local = new N5FSReader( imageName );
             final RandomAccessibleInterval img = N5Utils.open(n5reader, datasetName);
 
-            // RS-FISH only supports 3D images so if image is >3D take a 3D slice
-            RandomAccessibleInterval<?> img3D = img;
-            if ( img.numDimensions() > 3 ) {
-                // I assume the channel and timepoint block dimensions are just 1,
-                // so I am getting the corresponding spatial 3D hyperslice
-                for (int d = img.numDimensions() - 1; d >= 3; d--) {
-                    img3D = Views.hyperSlice(img3D, d, block.min()[d]);
-                }
-            }
             HelperFunctions.headless = true;
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List<double[]> points = Radial_Symmetry.runRSFISH(
-                    (RandomAccessible) Views.extendMirrorSingle(img3D),
-                    new FinalInterval(minCoords, maxCoords),
-                    new FinalInterval(block.minCoords(), block.maxCoords()),
+            ArrayList<double[]> points = Radial_Symmetry.runRSFISH(
+                    (RandomAccessible) (Object) Views.extendMirrorSingle(img),
+                    new FinalInterval(min, max),
+                    block.createInterval(),
                     params);
 
             System.out.println("block " + block.id() + " found " + points.size() + " spots.");
@@ -256,20 +239,21 @@ public class AWSSparkRSFISH implements Callable<Void> {
 
         rddResults.cache();
 
-        final List<Tuple2<Block, List<double[]>>> results =
-                new ArrayList<>(
-                        rddResults
-                                .filter(r -> r != null && r._2 != null && !r._2.isEmpty())
-                                .collect()
-                );
+        final ArrayList<Tuple2<Block, ArrayList<double[]>>> results = new ArrayList<>();
+        results.addAll(rddResults.collect());
 
         sc.close();
 
-        long spotsCount = results.stream().mapToLong( t -> t._2.size() ).sum();
+        final ArrayList<double[]> allPoints = new ArrayList<>();
 
-        System.out.println("total points: " + spotsCount);
+        for (final Tuple2<Block, ArrayList<double[]>> r : results) {
+            if (r != null && r._2() != null)
+                allPoints.addAll(r._2());
+        }
 
-        S3Utils.savePoints(n5Supplier.getS3(), results, output);
+        System.out.println("total points: " + allPoints.size());
+
+        S3Utils.savePoints(n5Supplier.getS3(), allPoints, output);
 
         return null;
     }
