@@ -18,11 +18,9 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.janelia.saalfeldlab.n5.DatasetAttributes;
 import org.janelia.saalfeldlab.n5.N5Reader;
 import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 import org.janelia.saalfeldlab.n5.universe.N5Factory;
@@ -38,6 +36,9 @@ import scala.Tuple2;
 
 public class SparkRSFISH implements Callable<Void>
 {
+	private static final int[] DEFAULT_BLOCK_SIZE_2D = new int[] { 512, 512 };
+	private static final int[] DEFAULT_BLOCK_SIZE_3D = new int[] { 128, 128, 64 };
+
 	// input file
 	@Option(names = {"-i", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
 	private String image = null;
@@ -56,8 +57,6 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = "--blockSize", required = false, description = "Blocksize for processing, e.g. 128,128,64 or 512,512 (default: as listed under e.g.)")
 	private String blockSizeString = null;
 	private int[] blockSize;
-	private static int[] defaultBlockSize2d = new int[] { 512, 512 };
-	private static int[] defaultBlockSize3d = new int[] { 128, 128, 64 };
 
 	@Option(names = "--min", required = false, description = "Min coordinates of an OPTIONALLY defined subset of the entire image to be processed, e.g. 100,100,200 or 400,500 (default: entire image)")
 	private String min = null;
@@ -66,6 +65,18 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = "--max", required = false, description = "Max coordinates of an OPTIONALLY defined subset of the entire image to be processed, e.g. 1000,800,300 or 1400,800 (default: entire image)")
 	private String max = null;
 	private long[] maxInterval;
+
+	@Option(names = "--min-channel", description = "Min channel (inclusive). If value < 0 it is not used.")
+	private int minChannel = -1;
+
+	@Option(names = "--max-channel", description = "Max channel (exclusive). If value < 0 it is not used.")
+	private int maxChannel = -1;
+
+	@Option(names = "--min-timeindex", description = "Min timeindex (inclusive). If value < 0 it is not used.")
+	private int minTimeIndex = -1;
+
+	@Option(names = "--max-timeindex", description = "Max timeindex (exclusive). If value < 0 it is not used.")
+	private int maxTimeIndex = -1;
 
 	// intensity settings
 	@Option(names = {"-i0", "--minIntensity"}, required = true, description = "minimal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
@@ -173,9 +184,9 @@ public class SparkRSFISH implements Callable<Void>
 
 		if ( this.blockSizeString == null ) {
 			if ( nDims == 2 )
-				this.blockSize = defaultBlockSize2d.clone();
+				this.blockSize = DEFAULT_BLOCK_SIZE_2D.clone();
 			else
-				this.blockSize = defaultBlockSize3d.clone();
+				this.blockSize = DEFAULT_BLOCK_SIZE_3D.clone();
 		} else {
 			this.blockSize = new int[ nDims ];
 			parseCSIntArray( blockSizeString, blockSize );
@@ -237,11 +248,19 @@ public class SparkRSFISH implements Callable<Void>
 		params.numThreads = 1;
 
 		final List<double[]> results = new ArrayList<>();
+		final int timeaxis = imageDimensions._1[0];
+		final int channelaxis = imageDimensions._1[1];
 
-		for (int t = 0; t < imageDimensions._2[0]; t++) {
-			final int timeaxis = imageDimensions._1[0];
-			for (int c = 0; c < imageDimensions._2[1]; c++) {
-				final int channelaxis = imageDimensions._1[1];
+		// only consider time and channel intervals if time or channel axes are defined
+		int startTimeIndex = minTimeIndex >= 0 && timeaxis != -1 ? minTimeIndex : 0;
+		int endTimeIndex = maxTimeIndex >= 0 && timeaxis != -1 ? maxTimeIndex : (int) imageDimensions._2[0];
+		int startChannel = minChannel >= 0 && channelaxis != -1 ? minChannel : 0;
+		int endChannel = maxChannel >= 0 && channelaxis != -1 ? maxChannel : (int) imageDimensions._2[1];
+
+		System.out.printf("Timeinterval:[%d,%d), Channel interval: [%d, %d)\n",
+				startTimeIndex, endTimeIndex, startChannel, endChannel);
+		for (int t = startTimeIndex; t < endTimeIndex; t++) {
+			for (int c = startChannel; c < endChannel; c++) {
 
 				// process spatial blocks for the current timepoint and channel
 				List<double[]> blockResults = processBlocks(
