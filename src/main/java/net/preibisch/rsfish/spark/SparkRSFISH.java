@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import benchmark.TextFileAccess;
 import com.google.gson.GsonBuilder;
@@ -74,7 +75,10 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = "--max-channel", description = "Max channel (exclusive). If value < 0 it is not used.")
 	private int maxChannel = -1;
 
-	@Option(names = {"--excluded-channels"}, split = ",", description = "Comma-separated list of (0-based) channel values")
+	@Option(names = {"--included-channels"}, split = ",", description = "Comma-separated list of (0-based) channel values to be used spot extraction. Default to all.")
+	private Set<Integer> includedChannels;
+
+	@Option(names = {"--excluded-channels"}, split = ",", description = "Comma-separated list of (0-based) channel values to be excluded from spot extraction. Default to none.")
 	private Set<Integer> excludedChannels;
 
 	@Option(names = "--min-timeindex", description = "Min timeindex (inclusive). If value < 0 it is not used.")
@@ -264,8 +268,14 @@ public class SparkRSFISH implements Callable<Void>
 
 		System.out.printf("Timeinterval:[%d,%d), Channel interval: [%d, %d)\n",
 				startTimeIndex, endTimeIndex, startChannel, endChannel);
+		List<Integer> processedChannels;
+		if (includedChannels != null && !includedChannels.isEmpty()) {
+			processedChannels = new ArrayList<>(includedChannels);
+		} else {
+			processedChannels = IntStream.range(startChannel, endChannel).boxed().collect(Collectors.toList());
+		}
 		for (int t = startTimeIndex; t < endTimeIndex; t++) {
-			for (int c = startChannel; c < endChannel; c++) {
+			for (Integer c : processedChannels) {
 				if (excludedChannels != null && excludedChannels.contains(c) ) {
 					continue; // skip this channel
 				}
