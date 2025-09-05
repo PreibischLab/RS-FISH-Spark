@@ -97,6 +97,9 @@ public class SparkRSFISH implements Callable<Void>
 
 		@Option(names = {"-i1", "--maxIntensity"}, defaultValue = "0.0", description = "maximal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
 		private double maxIntensity = 0.0;
+
+		@Option(names = {"--intensityMethod"}, defaultValue = "0", description = "intensity method: 0 - linear interpolation, 1 - gaussian fit, 2 - integrate spot intensities")
+		private int intensityMethod = 0;
 	}
 
 	// input file
@@ -415,6 +418,7 @@ public class SparkRSFISH implements Callable<Void>
 		params.inlierRatio = (float)cliParams.inlierRatio;
 		params.maxError = (float)cliParams.maxError;
 		params.intensityThreshold = cliParams.intensityThreshold;
+		params.intensityMethod = cliParams.intensityMethod;
 
 		// background method
 		params.bsMethod = cliParams.background; // 0 == None, 1 == Mean, 2==Median, 3==RANSAC on Mean, 4==RANSAC on Median
