@@ -214,11 +214,10 @@ public class SparkRSFISH implements Callable<Void>
 		System.out.println( "Processing blocksize: " + Util.printCoordinates( blockSize ));
 
 		// create default options (for all channels)
-		int defaultRadialSymCLIOptionsIndex = lookupPerChannelRadialSymOptions(-1);
-		RadialSymParamsGroup defaultRadialSymCLIOptions = defaultRadialSymCLIOptionsIndex == -1
-				? new RadialSymParamsGroup() // use default RS-FISH parameters
-				: radialSymOptions.get(defaultRadialSymCLIOptionsIndex);
-		final RadialSymParams defaultRadialSymParams = createParamsFromCLIOptions(defaultRadialSymCLIOptions);
+		RadialSymParamsGroup defaultRadialOptions = lookupPerChannelRadialSymOptions(-1);
+		final RadialSymParams defaultRadialSymParams = createParamsFromCLIOptions(
+				defaultRadialOptions != null ? defaultRadialOptions : new RadialSymParamsGroup()
+		);
 
 		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
 
@@ -251,13 +250,12 @@ public class SparkRSFISH implements Callable<Void>
 		// create per channel RS-FISH parameters
 		Map<Integer, RadialSymParams> radialSymParamsPerChannel = processedChannels.stream()
 				.map(ch -> {
-					int channelRadialSymCLIOptionsIndex = lookupPerChannelRadialSymOptions(ch);
-					if (channelRadialSymCLIOptionsIndex == -1) {
+					RadialSymParamsGroup channelRadialSymOptions = lookupPerChannelRadialSymOptions(ch);
+					if (channelRadialSymOptions == null) {
 						return new Tuple2<>(ch, defaultRadialSymParams); // use default RS-FISH parameters if no channel-specific parameters are defined
 					} else {
-						RadialSymParamsGroup channelRadialSymCLIOptions = radialSymOptions.get(channelRadialSymCLIOptionsIndex);
 						// create RadialSymParams from CLI options
-						RadialSymParams channelParams = createParamsFromCLIOptions(channelRadialSymCLIOptions);
+						RadialSymParams channelParams = createParamsFromCLIOptions(channelRadialSymOptions);
 						return new Tuple2<>(ch, channelParams);
 					}
 				})
@@ -377,13 +375,13 @@ public class SparkRSFISH implements Callable<Void>
 		return new Tuple2<>(axesPos, dimensions);
 	}
 
-	private int lookupPerChannelRadialSymOptions(int channel) {
+	private RadialSymParamsGroup lookupPerChannelRadialSymOptions(int channel) {
 		if ( radialSymOptions != null && !radialSymOptions.isEmpty() )
-			for (int i = 0; i < radialSymOptions.size(); i++) {
-				if ( radialSymOptions.get(i).channel == channel ) return i;
+			for (RadialSymParamsGroup channelOptions : radialSymOptions) {
+				if ( channelOptions.channel == channel ) return channelOptions;
 			}
 
-		return -1;
+		return null;
 	}
 
 	private RadialSymParams createParamsFromCLIOptions(RadialSymParamsGroup cliParams) {
