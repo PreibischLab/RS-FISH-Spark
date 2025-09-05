@@ -3,8 +3,8 @@ package net.preibisch.rsfish.spark;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
@@ -41,6 +41,63 @@ public class SparkRSFISH implements Callable<Void>
 {
 	private static final int[] DEFAULT_BLOCK_SIZE_2D = new int[] { 512, 512 };
 	private static final int[] DEFAULT_BLOCK_SIZE_3D = new int[] { 128, 128, 64 };
+
+	// RS settings
+	static class RadialSymParamsGroup {
+		@Option(names = {"--for-channel"}, defaultValue = "-1", description ="specify the channel for which the radial symmetry parameters apply, e.g. -co 0 (default: -1, i.e. all channels)")
+		private int channel = -1;
+
+		@Option(names = {"-a", "--anisotropy"}, defaultValue = "1.", description = "the anisotropy factor (scaling of z relative to xy, can be determined using the anisotropy plugin), e.g. -a 0.8 (default: 1.0)")
+		private double anisotropy = 1.0;
+
+		@Option(names = {"-r", "--ransac"}, defaultValue = "1", description = "which RANSAC type to use, 0 == No RANSAC, 1 == RANSAC, 2 == Multiconsensus RANSAC (default: 1 - RANSAC)")
+		private int ransac = 1;
+
+		@Option(names = {"-s", "--sigma"}, defaultValue = "1.5", description = "sigma for Difference-of-Gaussian (DoG) (default: 1.5)")
+		private double sigma = 1.5;
+
+		@Option(names = {"-t", "--threshold"}, defaultValue = "0.007", description = "threshold for Difference-of-Gaussian (DoG) (default: 0.007)")
+		private double threshold = 0.007;
+
+		@Option(names = {"-sr", "--supportRadius"}, defaultValue = "3", description = "support region radius for RANSAC (default: 3)")
+		private int supportRadius = 3;
+
+		@Option(names = {"-ir", "--inlierRatio"}, defaultValue = "0.1", description = "Minimal ratio of gradients that agree on a spot (inliers) for RANSAC (default: 0.1)")
+		private double inlierRatio = 0.1;
+
+		@Option(names = {"-e", "--maxError"}, defaultValue = "1.5", description = "Maximum error for intersecting gradients of a spot for RANSAC (default: 1.5)")
+		private double maxError = 1.5;
+
+		@Option(names = {"-it", "--intensityThreshold"}, defaultValue = "0.", description = "intensity threshold for localized spots (default: 0.0)")
+		private double intensityThreshold = 0.0;
+
+		// background method
+		@Option(names = {"-bg", "--background"}, defaultValue = "0", description = "Background subtraction method, 0 == None, 1 == Mean, 2==Median, 3==RANSAC on Mean, 4==RANSAC on Median (default: 0 - None)")
+		private int background = 0;
+
+		@Option(names = {"-bge", "--backgroundMaxError"}, defaultValue = "0.05", description = "RANSAC-based background subtraction max error (default: 0.05)")
+		private double backgroundMaxError = 0.05;
+
+		@Option(names = {"-bgir", "--backgroundMinInlierRatio"}, defaultValue = "0.75", description = "RANSAC-based background subtraction min inlier ratio (default: 0.75)")
+		private double backgroundMinInlierRatio = 0.75;
+
+		// only for multiconsensus RANSAC
+		@Option(names = {"-rm", "--ransacMinNumInliers"}, defaultValue = "20", description = "minimal number of inliers for Multiconsensus RANSAC (default: 20)")
+		private int ransacMinNumInliers = 20;
+
+		@Option(names = {"-rn1", "--ransacNTimesStDev1"}, defaultValue = "8.0", description = "n: initial #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 8.0)")
+		private double ransacNTimesStDev1 = 8.0;
+
+		@Option(names = {"-rn2", "--ransacNTimesStDev2"}, defaultValue = "6.0", description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
+		private double ransacNTimesStDev2 = 6.0;
+
+		// intensity settings
+		@Option(names = {"-i0", "--minIntensity"}, defaultValue = "0.0", description = "minimal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
+		private double minIntensity = 0.0;
+
+		@Option(names = {"-i1", "--maxIntensity"}, defaultValue = "0.0", description = "maximal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
+		private double maxIntensity = 0.0;
+	}
 
 	// input file
 	@Option(names = {"-i", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
@@ -87,57 +144,8 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = "--max-timeindex", description = "Max timeindex (exclusive). If value < 0 it is not used.")
 	private int maxTimeIndex = -1;
 
-	// intensity settings
-	@Option(names = {"-i0", "--minIntensity"}, required = true, description = "minimal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
-	private double minIntensity = 0.0;
-
-	@Option(names = {"-i1", "--maxIntensity"}, required = true, description = "maximal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
-	private double maxIntensity = 0.0;
-
-	// RS settings
-	@Option(names = {"-a", "--anisotropy"}, required = true, description = "the anisotropy factor (scaling of z relative to xy, can be determined using the anisotropy plugin), e.g. -a 0.8 (default: 1.0)")
-	private double anisotropy = 1.0;
-
-	@Option(names = {"-r", "--ransac"}, required = false, description = "which RANSAC type to use, 0 == No RANSAC, 1 == RANSAC, 2 == Multiconsensus RANSAC (default: 1 - RANSAC)")
-	private int ransac = 1;
-
-	@Option(names = {"-s", "--sigma"}, required = false, description = "sigma for Difference-of-Gaussian (DoG) (default: 1.5)")
-	private double sigma = 1.5;
-
-	@Option(names = {"-t", "--threshold"}, required = false, description = "threshold for Difference-of-Gaussian (DoG) (default: 0.007)")
-	private double threshold = 0.007;
-
-	@Option(names = {"-sr", "--supportRadius"}, required = false, description = "support region radius for RANSAC (default: 3)")
-	private int supportRadius = 3;
-
-	@Option(names = {"-ir", "--inlierRatio"}, required = false, description = "Minimal ratio of gradients that agree on a spot (inliers) for RANSAC (default: 0.1)")
-	private double inlierRatio = 0.1;
-
-	@Option(names = {"-e", "--maxError"}, required = false, description = "Maximum error for intersecting gradients of a spot for RANSAC (default: 1.5)")
-	private double maxError = 1.5;
-
-	@Option(names = {"-it", "--intensityThreshold"}, required = false, description = "intensity threshold for localized spots (default: 0.0)")
-	private double intensityThreshold = 0.0;
-
-	// background method
-	@Option(names = {"-bg", "--background"}, required = false, description = "Background subtraction method, 0 == None, 1 == Mean, 2==Median, 3==RANSAC on Mean, 4==RANSAC on Median (default: 0 - None)")
-	private int background = 0;
-
-	@Option(names = {"-bge", "--backgroundMaxError"}, required = false, description = "RANSAC-based background subtraction max error (default: 0.05)")
-	private double backgroundMaxError = 0.05;
-
-	@Option(names = {"-bgir", "--backgroundMinInlierRatio"}, required = false, description = "RANSAC-based background subtraction min inlier ratio (default: 0.75)")
-	private double backgroundMinInlierRatio = 0.75;
-
-	// only for multiconsensus RANSAC
-	@Option(names = {"-rm", "--ransacMinNumInliers"}, required = false, description = "minimal number of inliers for Multiconsensus RANSAC (default: 20)")
-	private int ransacMinNumInliers = 20;
-
-	@Option(names = {"-rn1", "--ransacNTimesStDev1"}, required = false, description = "n: initial #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 8.0)")
-	private double ransacNTimesStDev1 = 8.0;
-
-	@Option(names = {"-rn2", "--ransacNTimesStDev2"}, required = false, description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
-	private double ransacNTimesStDev2 = 6.0;
+	@CommandLine.ArgGroup(exclusive = false, multiplicity = "0..*")
+	private List<RadialSymParamsGroup> radialSymOptions;
 
 	@Override
 	public Void call() throws Exception
@@ -161,7 +169,6 @@ public class SparkRSFISH implements Callable<Void>
 			datasetParent = "";
 		else
 			datasetParent = String.join("/", Arrays.copyOf(datasetComps, datasetComps.length - 1));
-
 
 		final long[] datasetDimensions = n5AttrsReader.getDatasetAttributes(dataset).getDimensions();
 
@@ -203,42 +210,12 @@ public class SparkRSFISH implements Callable<Void>
 
 		System.out.println( "Processing blocksize: " + Util.printCoordinates( blockSize ));
 
-		// create parameter object
-		final RadialSymParams params = new RadialSymParams();
-
-		// general
-		params.anisotropyCoefficient = anisotropy;
-		params.useAnisotropyForDoG = true;
-		params.ransacSelection = ransac; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
-
-		if ( minIntensity == maxIntensity ) {
-			params.min = Double.NaN;
-			params.max = Double.NaN;
-			params.autoMinMax = true;
-		} else {
-			params.min = minIntensity;
-			params.max = maxIntensity;
-			params.autoMinMax = false;
-		}
-
-		// multiconsensus
-		if ( ransac == 2 ) {
-			params.minNumInliers = ransacMinNumInliers;
-			params.nTimesStDev1 = ransacNTimesStDev1;
-			params.nTimesStDev2 = ransacNTimesStDev2;
-		}
-
-		// advanced
-		params.sigma = (float)sigma;
-		params.threshold = (float)threshold;
-		params.supportRadius = supportRadius;
-		params.inlierRatio = (float)inlierRatio;
-		params.maxError = (float)maxError;
-		params.intensityThreshold = intensityThreshold;
-		params.bsMethod = background;
-		params.bsMaxError = (float)backgroundMaxError;
-		params.bsInlierRatio = (float)backgroundMinInlierRatio;
-		params.resultsFilePath = output;
+		// create default options (for all channels)
+		int defaultRadialSymCLIOptionsIndex = lookupPerChannelRadialSymOptions(-1);
+		RadialSymParamsGroup defaultRadialSymCLIOptions = defaultRadialSymCLIOptionsIndex == -1
+				? new RadialSymParamsGroup() // use default RS-FISH parameters
+				: radialSymOptions.get(defaultRadialSymCLIOptionsIndex);
+		final RadialSymParams defaultRadialSymParams = createParamsFromCLIOptions(defaultRadialSymCLIOptions);
 
 		final SparkConf sparkConf = new SparkConf().setAppName(SparkRSFISH.class.getSimpleName());
 
@@ -248,13 +225,6 @@ public class SparkRSFISH implements Callable<Void>
 		// only 2 pixel overlap necessary to find local max/min to start - we then anyways load the full underlying image for each block
 		final List< Block > blocks = Block.splitIntoBlocks( interval, blockSize);
 		System.out.printf("Split %s interval into %d %s blocks\n", Util.printInterval(interval), blocks.size(), Arrays.toString(blockSize));
-
-
-		// do not store local results
-		params.resultsFilePath = "";
-
-		// single-threaded within each block
-		params.numThreads = 1;
 
 		final List<double[]> results = new ArrayList<>();
 		final int timeaxis = imageDimensions._1[0];
@@ -274,14 +244,33 @@ public class SparkRSFISH implements Callable<Void>
 		} else {
 			processedChannels = IntStream.range(startChannel, endChannel).boxed().collect(Collectors.toList());
 		}
+
+		// create per channel RS-FISH parameters
+		Map<Integer, RadialSymParams> radialSymParamsPerChannel = processedChannels.stream()
+				.map(ch -> {
+					int channelRadialSymCLIOptionsIndex = lookupPerChannelRadialSymOptions(ch);
+					if (channelRadialSymCLIOptionsIndex == -1) {
+						return new Tuple2<>(ch, defaultRadialSymParams); // use default RS-FISH parameters if no channel-specific parameters are defined
+					} else {
+						RadialSymParamsGroup channelRadialSymCLIOptions = radialSymOptions.get(channelRadialSymCLIOptionsIndex);
+						// create RadialSymParams from CLI options
+						RadialSymParams channelParams = createParamsFromCLIOptions(channelRadialSymCLIOptions);
+						return new Tuple2<>(ch, channelParams);
+					}
+				})
+				.collect(Collectors.toMap(Tuple2::_1, Tuple2::_2))
+				;
+
 		for (int t = startTimeIndex; t < endTimeIndex; t++) {
 			for (Integer c : processedChannels) {
 				if (excludedChannels != null && excludedChannels.contains(c) ) {
 					continue; // skip this channel
 				}
+
+				RadialSymParams channelParams = radialSymParamsPerChannel.get(c);
 				// process spatial blocks for the current timepoint and channel
 				List<double[]> blockResults = processBlocks(
-						image, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageFormat, blocks, params, sc
+						image, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageFormat, blocks, channelParams, sc
 				);
 				results.addAll( blockResults );
 			}
@@ -383,6 +372,62 @@ public class SparkRSFISH implements Callable<Void>
 			dimensions[i + 2] = spatialDimensions[i];
 		}
 		return new Tuple2<>(axesPos, dimensions);
+	}
+
+	private int lookupPerChannelRadialSymOptions(int channel) {
+		if ( radialSymOptions != null && !radialSymOptions.isEmpty() )
+			for (int i = 0; i < radialSymOptions.size(); i++) {
+				if ( radialSymOptions.get(i).channel == channel ) return i;
+			}
+
+		return -1;
+	}
+
+	private RadialSymParams createParamsFromCLIOptions(RadialSymParamsGroup cliParams) {
+		final RadialSymParams params = new RadialSymParams();
+
+		// general
+		params.anisotropyCoefficient = cliParams.anisotropy;
+		params.useAnisotropyForDoG = RadialSymParams.defaultUseAnisotropyForDoG;
+		params.ransacSelection = cliParams.ransac; //"No RANSAC", "RANSAC", "Multiconsensus RANSAC"
+
+		if ( cliParams.minIntensity == cliParams.maxIntensity ) {
+			params.min = Double.NaN;
+			params.max = Double.NaN;
+			params.autoMinMax = true;
+		} else {
+			params.min = cliParams.minIntensity;
+			params.max = cliParams.maxIntensity;
+			params.autoMinMax = false;
+		}
+
+		// multiconsensus
+		if ( cliParams.ransac == 2 ) {
+			params.minNumInliers = cliParams.ransacMinNumInliers;
+			params.nTimesStDev1 = cliParams.ransacNTimesStDev1;
+			params.nTimesStDev2 = cliParams.ransacNTimesStDev2;
+		}
+
+		// advanced
+		params.sigma = (float)cliParams.sigma;
+		params.threshold = (float)cliParams.threshold;
+		params.supportRadius = cliParams.supportRadius;
+		params.inlierRatio = (float)cliParams.inlierRatio;
+		params.maxError = (float)cliParams.maxError;
+		params.intensityThreshold = cliParams.intensityThreshold;
+
+		// background method
+		params.bsMethod = cliParams.background; // 0 == None, 1 == Mean, 2==Median, 3==RANSAC on Mean, 4==RANSAC on Median
+		params.bsMaxError = (float)cliParams.backgroundMaxError;
+		params.bsInlierRatio = (float)cliParams.backgroundMinInlierRatio;
+
+		// do not store local results
+		params.resultsFilePath = "";
+
+		// single-threaded within each block
+		params.numThreads = 1;
+
+		return params;
 	}
 
 	private List<double[]> processBlocks(
