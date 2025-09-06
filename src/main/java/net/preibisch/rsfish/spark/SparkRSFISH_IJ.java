@@ -211,26 +211,28 @@ public class SparkRSFISH_IJ implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
+		/*
+		PrintWriter out = TextFileAccess.openFileWrite( "/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/cmdline.txt" );
 
-//		PrintWriter out = TextFileAccess.openFileWrite( "/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/cmdline.txt" );
-//
-//		out.println("-i0 4166.0\n" +
-//				"-i1 46562.0\n" +
-//				"-a 1.0");
-//		for ( int i = 0; i < 10000; ++i )
-//		{
-//			out.println("-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'\n" +
-//					"-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0_" + i + ".tif.csv'");
-//		}
+		out.println("-i0 4166.0\n" + 
+				"-i1 46562.0\n" + 
+				"-a 1.0");
+		for ( int i = 0; i < 10000; ++i )
+		{
+			out.println("-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'\n" + 
+					"-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0_" + i + ".tif.csv'");
+		}
+		
+		out.close();
 
-//		out.close();
-//		String[] arg = new String[]{
-//				"-i0", "4166.0",
-//				"-i1", "46562.0",
-//				"-a", "1.0",
-//				"-i", "/Users/zouinkhim/Desktop/java/RS-FISH-Spark/src/main/resources/multiple_dots_2D.tif",
-//				"-o", "/Users/zouinkhim/Desktop/java/RS-FISH-Spark/src/main/resources/multiple_dots_2D.csv"
-//		};
+		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif'
+		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_702_cropped_1620 (high SNR)_ch0.tif.csv'
+		-i '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif'
+		-o '/Users/spreibi/Documents/BIMSB/Publications/radialsymmetry/N2_1639_cropped_3974 (low SNR)_ch0.tif.csv'
+		-i0 4166.0
+		-i1 46562.0
+		-a 1.0
+		*/
 
 		new CommandLine( new SparkRSFISH_IJ() ).execute( args );
 	}
