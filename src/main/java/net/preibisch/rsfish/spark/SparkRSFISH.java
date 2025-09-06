@@ -114,6 +114,9 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = {"-rn2", "--ransacNTimesStDev2"}, required = false, description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
 	private double ransacNTimesStDev2 = 6.0;
 
+	@Option(names = {"-ime", "--intensityMethod"}, required = false, description = "Intensity calculation method, 0 == Linear Interpolation, 1 == Gaussian fit (on inlier pixels), 2 == Integrate spot intensities (on candidate pixels) (default: 0 - Linear Interpolation)")
+	private int intensityMethod = 0;
+
 	@Override
 	public Void call() throws Exception
 	{
@@ -202,6 +205,7 @@ public class SparkRSFISH implements Callable<Void>
 		params.maxError = (float)maxError;
 		params.intensityThreshold = intensityThreshold;
 		params.bsMethod = background;
+		params.intensityMethod = intensityMethod;
 		params.bsMaxError = (float)backgroundMaxError;
 		params.bsInlierRatio = (float)backgroundMinInlierRatio;
 		params.resultsFilePath = output;
@@ -334,7 +338,7 @@ public class SparkRSFISH implements Callable<Void>
 	}
 
 	public static final void main(final String... args) {
-		System.out.println(String.join(" ",args));
-		new CommandLine( new SparkRSFISH() ).execute( args );
+		System.out.println(String.join(" ", args));
+		new CommandLine(new SparkRSFISH()).execute(args);
 	}
 }
