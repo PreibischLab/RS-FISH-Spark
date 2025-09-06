@@ -45,61 +45,61 @@ public class SparkRSFISH implements Callable<Void>
 	// RS settings
 	static class RadialSymParamsGroup {
 		@Option(names = {"--for-channel"}, defaultValue = "-1", description ="specify the channel for which the radial symmetry parameters apply, e.g. -co 0 (default: -1, i.e. all channels)")
-		private int channel = -1;
+		int channel = -1;
 
 		@Option(names = {"-a", "--anisotropy"}, defaultValue = "1.", description = "the anisotropy factor (scaling of z relative to xy, can be determined using the anisotropy plugin), e.g. -a 0.8 (default: 1.0)")
-		private double anisotropy = 1.0;
+		double anisotropy = 1.0;
 
 		@Option(names = {"-r", "--ransac"}, defaultValue = "1", description = "which RANSAC type to use, 0 == No RANSAC, 1 == RANSAC, 2 == Multiconsensus RANSAC (default: 1 - RANSAC)")
-		private int ransac = 1;
+		int ransac = 1;
 
 		@Option(names = {"-s", "--sigma"}, defaultValue = "1.5", description = "sigma for Difference-of-Gaussian (DoG) (default: 1.5)")
-		private double sigma = 1.5;
+		double sigma = 1.5;
 
 		@Option(names = {"-t", "--threshold"}, defaultValue = "0.007", description = "threshold for Difference-of-Gaussian (DoG) (default: 0.007)")
-		private double threshold = 0.007;
+		double threshold = 0.007;
 
 		@Option(names = {"-sr", "--supportRadius"}, defaultValue = "3", description = "support region radius for RANSAC (default: 3)")
-		private int supportRadius = 3;
+		int supportRadius = 3;
 
 		@Option(names = {"-ir", "--inlierRatio"}, defaultValue = "0.1", description = "Minimal ratio of gradients that agree on a spot (inliers) for RANSAC (default: 0.1)")
-		private double inlierRatio = 0.1;
+		double inlierRatio = 0.1;
 
 		@Option(names = {"-e", "--maxError"}, defaultValue = "1.5", description = "Maximum error for intersecting gradients of a spot for RANSAC (default: 1.5)")
-		private double maxError = 1.5;
+		double maxError = 1.5;
 
 		@Option(names = {"-it", "--intensityThreshold"}, defaultValue = "0.", description = "intensity threshold for localized spots (default: 0.0)")
-		private double intensityThreshold = 0.0;
+		double intensityThreshold = 0.0;
 
 		// background method
 		@Option(names = {"-bg", "--background"}, defaultValue = "0", description = "Background subtraction method, 0 == None, 1 == Mean, 2==Median, 3==RANSAC on Mean, 4==RANSAC on Median (default: 0 - None)")
-		private int background = 0;
+		int background = 0;
 
 		@Option(names = {"-bge", "--backgroundMaxError"}, defaultValue = "0.05", description = "RANSAC-based background subtraction max error (default: 0.05)")
-		private double backgroundMaxError = 0.05;
+		double backgroundMaxError = 0.05;
 
 		@Option(names = {"-bgir", "--backgroundMinInlierRatio"}, defaultValue = "0.75", description = "RANSAC-based background subtraction min inlier ratio (default: 0.75)")
-		private double backgroundMinInlierRatio = 0.75;
+		double backgroundMinInlierRatio = 0.75;
 
 		// only for multiconsensus RANSAC
 		@Option(names = {"-rm", "--ransacMinNumInliers"}, defaultValue = "20", description = "minimal number of inliers for Multiconsensus RANSAC (default: 20)")
-		private int ransacMinNumInliers = 20;
+		int ransacMinNumInliers = 20;
 
 		@Option(names = {"-rn1", "--ransacNTimesStDev1"}, defaultValue = "8.0", description = "n: initial #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 8.0)")
-		private double ransacNTimesStDev1 = 8.0;
+		double ransacNTimesStDev1 = 8.0;
 
 		@Option(names = {"-rn2", "--ransacNTimesStDev2"}, defaultValue = "6.0", description = "n: final #inlier threshold for new spot [avg - n*stdev] for Multiconsensus RANSAC (default: 6.0)")
-		private double ransacNTimesStDev2 = 6.0;
+		double ransacNTimesStDev2 = 6.0;
 
 		// intensity settings
 		@Option(names = {"-i0", "--minIntensity"}, defaultValue = "0.0", description = "minimal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
-		private double minIntensity = 0.0;
+		double minIntensity = 0.0;
 
 		@Option(names = {"-i1", "--maxIntensity"}, defaultValue = "0.0", description = "maximal intensity of the image, if min=max will be computed from the image per-block(!) (default: 0.0)")
-		private double maxIntensity = 0.0;
+		double maxIntensity = 0.0;
 
-		@Option(names = {"--intensityMethod"}, defaultValue = "0", description = "intensity method: 0 - linear interpolation, 1 - gaussian fit, 2 - integrate spot intensities")
-		private int intensityMethod = 0;
+		@Option(names = {"-ime", "--intensityMethod"}, defaultValue = "0", description = "intensity method: 0 - linear interpolation, 1 - gaussian fit, 2 - integrate spot intensities")
+		int intensityMethod = 0;
 	}
 
 	// input file
@@ -147,6 +147,13 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = "--max-timeindex", description = "Max timeindex (exclusive). If value < 0 it is not used.")
 	private int maxTimeIndex = -1;
 
+	/** Per-channel RS-FISH parameters, e.g.
+	 * --for-channel -1 --anisotropy 2.0 --sigma 1.5 --threshold 0.01
+	 * --for-channel 0 --anisotropy 2.0 --sigma 1.5 --threshold 0.01
+	 * --for-channel 1 --anisotropy 1.0 --sigma 2.0 --threshold 0.02
+	 * If no per-channel parameters are defined, the default RS-FISH parameters are used for all channels.
+	 * If a channel does not have specific parameters defined, the default RS-FISH parameters are used for this channel.
+	 * */
 	@CommandLine.ArgGroup(exclusive = false, multiplicity = "0..*")
 	private List<RadialSymParamsGroup> radialSymOptions;
 
