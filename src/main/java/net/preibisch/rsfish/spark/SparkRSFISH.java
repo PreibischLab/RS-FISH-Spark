@@ -452,6 +452,10 @@ public class SparkRSFISH implements Callable<Void>
 
 		final JavaRDD<Block> rddIds = sc.parallelize( blocks );
 
+		System.out.printf("Start processing %d blocks from %s:%s:%s:%s interval, timepoint: %d, channel: %d\n", blocks.size(),
+				imageUri, datasetName, Util.printCoordinates(minInterval),Util.printCoordinates(maxInterval), timeindex, channel);
+		params.printParams();
+
 		final JavaPairRDD<Block, List<double[]> > rddResults = rddIds.mapToPair( block -> {
 
 			System.out.printf( "Processing block %d:%d:%s (%s)\n",
@@ -507,10 +511,15 @@ public class SparkRSFISH implements Callable<Void>
 		rddResults.cache();
 
 		// filter out block results that do not have any points
-		return rddResults
+		List<double[]> results = rddResults
 				.filter(r -> r != null && r._2 != null && !r._2.isEmpty())
 				.flatMap(r -> r._2.iterator())
 				.collect();
+
+		System.out.printf("Finished processing %d blocks from %s:%s:%s:%s interval, timepoint: %d, channel: %d\n", blocks.size(),
+				imageUri, datasetName, Util.printCoordinates(minInterval),Util.printCoordinates(maxInterval), timeindex, channel);
+
+		return results;
 	}
 
 	// taken from: hot-knife repository (Saalfeld)

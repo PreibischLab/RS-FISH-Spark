@@ -1,5 +1,5 @@
 ARG SPARK_VERSION=3.3.2-scala2.12-java17-ubuntu24.04
-ARG RS_FISH_SPARK_GIT_HASH=a06db09
+ARG RS_FISH_SPARK_GIT_HASH=ded148b
 
 FROM ghcr.io/janeliascicomp/spark:${SPARK_VERSION}
 ARG RS_FISH_SPARK_GIT_HASH
@@ -12,6 +12,8 @@ LABEL \
     org.opencontainers.image.version=${RS_FISH_SPARK_GIT_HASH}
 
 USER root
+
+ENV HADOOP_HOME=/opt/spark
 
 RUN apt update -y; \
     apt-get install -y \
