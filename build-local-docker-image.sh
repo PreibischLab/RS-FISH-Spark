@@ -3,11 +3,11 @@
 what=$1
 shift
 
-GIT_HASH=ded148b
+GIT_HASH=e81ca9e
 
 echo "Build RS-FISH:${GIT_HASH}"
 
-IMAGE_NAME=ghcr.io/janeliascicomp/rs-fish-spark:omedev
+IMAGE_NAME=ghcr.io/janeliascicomp/rs-fish-spark:omedev-${GIT_HASH}
 
 case $what in
   --build)

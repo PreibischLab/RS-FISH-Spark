@@ -1,5 +1,6 @@
 ARG SPARK_VERSION=3.3.2-scala2.12-java17-ubuntu24.04
-ARG RS_FISH_SPARK_GIT_HASH=ded148b
+ARG RS_FISH_BRANCH=ome
+ARG RS_FISH_SPARK_GIT_HASH=e81ca9e
 
 FROM ghcr.io/janeliascicomp/spark:${SPARK_VERSION}
 ARG RS_FISH_SPARK_GIT_HASH
@@ -22,4 +23,6 @@ RUN apt update -y; \
 
 WORKDIR /app
 COPY LICENSE.txt /app/LICENSE.txt
-COPY target/RS-FISH-Spark-0.0.2-SNAPSHOT-with-dependencies.jar /app/app.jar
+COPY target/RS-FISH-Spark-0.0.3-SNAPSHOT-with-dependencies.jar /app/app.jar
+RUN echo "${RS_FISH_BRANCH}:${RS_FISH_SPARK_GIT_HASH}" > /app/VERSION
+

@@ -1,6 +1,7 @@
 package net.preibisch.rsfish.spark;
 
 import java.io.PrintWriter;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -11,7 +12,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import benchmark.TextFileAccess;
-import com.google.gson.GsonBuilder;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import net.imglib2.FinalInterval;
@@ -20,18 +20,19 @@ import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
+import net.preibisch.rsfish.util.URITools;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.janelia.saalfeldlab.n5.DatasetAttributes;
 import org.janelia.saalfeldlab.n5.N5Reader;
 import org.janelia.saalfeldlab.n5.imglib2.N5Utils;
 import org.janelia.saalfeldlab.n5.universe.N5Factory;
 import org.janelia.saalfeldlab.n5.universe.StorageFormat;
 import org.janelia.saalfeldlab.n5.universe.metadata.axes.Axis;
-import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.OmeNgffMultiScaleMetadata;
-import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.coordinateTransformations.CoordinateTransformation;
-import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.v04.coordinateTransformations.CoordinateTransformationAdapter;
+import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.OmeNgffMetadata;
+import org.janelia.saalfeldlab.n5.universe.metadata.ome.ngff.OmeNgffMultiScaleMetadata;
 import parameters.RadialSymParams;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
@@ -103,8 +104,8 @@ public class SparkRSFISH implements Callable<Void>
 	}
 
 	// input file
-	@Option(names = {"-i", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
-	private String image = null;
+	@Option(names = {"-i", "--imagePath", "--image"}, required = true, description = "N5/HDF5/ZARR container path, e.g. -i '/home/smFish.n5' or -i '/home/smFish.h5' or -i '/home/smFish.zarr'")
+	private String imageURIString = null;
 
 	@Option(names = {"-d", "--dataset"}, required = true, description = "dataset within the N5/HDF5/ZARR, e.g. -d 'embryo_5_ch0/c0/s0'")
 	private String dataset = null;
@@ -113,8 +114,8 @@ public class SparkRSFISH implements Callable<Void>
 	@Option(names = {"-o", "--output"}, required = true, description = "output CSV file, e.g. -o 'embryo_5_ch0.csv'")
 	private String output = null;
 
-	@Option(names = {"--storage"}, required = false, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
-	private StorageFormat storageFormat = null;
+	@Option(names = {"-st", "--storage"}, showDefaultValue = CommandLine.Help.Visibility.ALWAYS, description = "Dataset input type, currently supported N5, ZARR, HDF5")
+	private StorageFormat storageType = null;
 
 	// processing options
 	@Option(names = "--blockSize", required = false, description = "Blocksize for processing, e.g. 128,128,64 or 512,512 (default: as listed under e.g.)")
@@ -160,18 +161,46 @@ public class SparkRSFISH implements Callable<Void>
 	@Override
 	public Void call() throws Exception
 	{
-		final N5Factory n5Factory = new N5Factory();
-		// configure N5 factory
-		n5Factory.gsonBuilder(new GsonBuilder().registerTypeAdapter(
-				CoordinateTransformation.class,
-				new CoordinateTransformationAdapter() )
-		);
-		n5Factory.preferredStorageFormat(storageFormat);
+		if ( storageType == null )
+		{
+			if ( imageURIString.toLowerCase().endsWith( ".zarr" ) )
+				storageType = StorageFormat.ZARR;
+			else if ( imageURIString.toLowerCase().endsWith( ".zarr2" ) )
+				storageType = StorageFormat.ZARR2;
+			else if ( imageURIString.toLowerCase().endsWith( ".n5" ) )
+				storageType = StorageFormat.N5;
+			else if ( imageURIString.toLowerCase().endsWith( ".h5" ) || imageURIString.toLowerCase().endsWith( ".hdf5" ) )
+				storageType = StorageFormat.HDF5;
+			else
+			{
+				System.out.println( "Unable to guess format from URI '" + imageURIString + "', please specify using '-s'");
+				return null;
+			}
 
-		N5Reader n5AttrsReader = n5Factory.openReader(image);
+			System.out.println( "Guessed format " + storageType + " will be used to open URI '" + imageURIString + "', you can override it using '-s'");
+		}
+		else
+		{
+			System.out.println( "Format " + storageType + " will be used to open " + imageURIString);
+		}
 
-		System.out.printf("Image: %s:%s => exists: %b\n", image, dataset, n5AttrsReader.datasetExists(dataset));
-		final RandomAccessibleInterval<?> img = N5Utils.open( n5AttrsReader, dataset );
+		URI imageURI = URITools.toURI(imageURIString);
+		// test that the container exists
+		N5Reader n5AttrsReader;
+		try
+		{
+			n5AttrsReader = URITools.instantiateN5Reader( storageType, imageURI);
+			System.out.println( "Found container '" + imageURI + "'.");
+		}
+		catch ( Exception e )
+		{
+			System.out.println( "Exception: " + e);
+			System.out.println( "Error, container '" + imageURI + "' does not exist/could not be loaded. If you are using ZARR2, you need specify it "
+					+ "since the default for .zarr is ZARR v3. If it doesn't exist, you need create an output container with create-fusion-container.");
+			return null;
+		}
+
+		System.out.printf("Image: %s:%s => exists: %b (reader: %s)\n", imageURIString, dataset, n5AttrsReader.datasetExists(dataset), n5AttrsReader);
 
 		String[] datasetComps = dataset.split("/");
 		String datasetParent;
@@ -180,14 +209,26 @@ public class SparkRSFISH implements Callable<Void>
 		else
 			datasetParent = String.join("/", Arrays.copyOf(datasetComps, datasetComps.length - 1));
 
-		final long[] datasetDimensions = n5AttrsReader.getDatasetAttributes(dataset).getDimensions();
+		OmeNgffMultiScaleMetadata[] multiscales;
+		@SuppressWarnings("Unchecked")
+		Map<String, ?> ome = (Map<String, ?>) n5AttrsReader.getAttribute(datasetParent, "ome", Map.class);
+		if (ome != null) {
+			multiscales = n5AttrsReader.getAttribute(
+					datasetParent, "ome/multiscales", OmeNgffMultiScaleMetadata[].class
+			);
+		} else {
+			multiscales = n5AttrsReader.getAttribute(
+					datasetParent, "multiscales", OmeNgffMultiScaleMetadata[].class
+			);
+		}
+
+		DatasetAttributes datasetAttributes = n5AttrsReader.getDatasetAttributes(dataset);
+		System.out.printf("Dataset '%s' attributes: %s", dataset, datasetAttributes);
+
+		final long[] datasetDimensions = datasetAttributes.getDimensions();
 
 		System.out.printf( "N5/HDF5/ZARR dataset dimensionality: %d\n", datasetDimensions.length );
 		System.out.printf( "N5/HDF5/ZARR dataset size: %s (%s)\n", Util.printCoordinates( datasetDimensions ), datasetDimensions);
-
-		OmeNgffMultiScaleMetadata[] multiscales = n5AttrsReader.getAttribute(
-				datasetParent, "multiscales", OmeNgffMultiScaleMetadata[].class
-		);
 
 		final Tuple2<int[], long[]> imageDimensions = getImageDimensions(multiscales, datasetDimensions);
 
@@ -278,7 +319,7 @@ public class SparkRSFISH implements Callable<Void>
 				RadialSymParams channelParams = radialSymParamsPerChannel.get(c);
 				// process spatial blocks for the current timepoint and channel
 				List<double[]> blockResults = processBlocks(
-						image, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageFormat, blocks, channelParams, sc
+						imageURIString, dataset, t, timeaxis, c, channelaxis, minInterval, maxInterval, storageType, blocks, channelParams, sc
 				);
 				results.addAll( blockResults );
 			}
