@@ -3,12 +3,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>RS-FISH-Spark</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.3-SNAPSHOT</version>
 
     <parent>
         <groupId>org.scijava</groupId>
         <artifactId>pom-scijava</artifactId>
-        <version>39.0.0</version>
+        <version>44.0.0</version>
         <relativePath/>
     </parent>
 
@@ -88,10 +88,19 @@
     </ciManagement>
 
     <properties>
-        <!--  <maven.compiler.release>8</maven.compiler.release> -->
-        <!-- <scijava.jvm.version>1.8</scijava.jvm.version> -->
         <license.licenseName>gpl_v2</license.licenseName>
         <license.copyrightOwners>Developers.</license.copyrightOwners>
+        <scijava.jvm.version>21</scijava.jvm.version>
+
+        <n5.version>4.0.0</n5.version>
+        <n5-aws-s3.version>5.0.0</n5-aws-s3.version>
+        <n5-hdf5.version>3.0.0</n5-hdf5.version>
+        <n5-imglib2.version>8.0.0</n5-imglib2.version>
+        <n5-universe.version>3.0.0</n5-universe.version>
+        <n5-zarr.version>2.0.1</n5-zarr.version>
+        <n5-zstandard.version>2.0.0</n5-zstandard.version>
+        <n5-blosc.version>2.0.0</n5-blosc.version>
+
     </properties>
     <repositories>
         <!-- NB: for project parent -->
@@ -118,45 +127,75 @@
                     <groupId>org.openmicroscopy</groupId>
                     <artifactId>ome-common</artifactId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>slf4j-log4j12</artifactId>
+                    <groupId>org.slf4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>commons-logging</artifactId>
+                    <groupId>commons-logging</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
-		<dependency>
-			<groupId>org.janelia.saalfeldlab</groupId>
-			<artifactId>n5-universe</artifactId>
-			<!-- <version>1.4.1</version> -->
+        <dependency>
+            <groupId>org.janelia.saalfeldlab</groupId>
+            <artifactId>n5-universe</artifactId>
+            <version>${n5-universe.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>javax.annotation</groupId>
+                    <artifactId>javax.annotation-api</artifactId>
+                </exclusion>
+            </exclusions>
 		</dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
             <artifactId>n5</artifactId>
+            <version>${n5.version}</version>
         </dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
             <artifactId>n5-zarr</artifactId>
+            <version>${n5-zarr.version}</version>
         </dependency>
         <dependency>
             <groupId>org.janelia.saalfeldlab</groupId>
             <artifactId>n5-aws-s3</artifactId>
-            <!-- <version>4.0.0</version> -->
+            <version>${n5-aws-s3.version}</version>
+            <exclusions>
+                <!-- netty-all already provides all io.netty classes; exclude individual modules to avoid duplicate class conflicts -->
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.7.0</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
         </dependency>
+        <!-- Scala is sensitive to fasterxml version -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.6.5</version>
+            <version>2.21.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.21</version>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.11</artifactId>
-            <version>2.4.7</version>
+            <!-- Spark 4.1.2 comes with scala 2.13 -->
+            <artifactId>spark-core_2.13</artifactId>
+            <version>4.1.2</version>
             <exclusions>
-                <exclusion>
-                    <artifactId>netty-all</artifactId>
-                    <groupId>io.netty</groupId>
-                </exclusion>
-
                 <exclusion>
                     <artifactId>jcl-over-slf4j</artifactId>
                     <groupId>org.slf4j</groupId>
@@ -170,6 +209,10 @@
                     <groupId>org.slf4j</groupId>
                 </exclusion>
                 <exclusion>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                    <groupId>org.apache.logging.log4j</groupId>
+                </exclusion>
+                <exclusion>
                     <artifactId>aopalliance-repackaged</artifactId>
                     <groupId>org.glassfish.hk2.external</groupId>
                 </exclusion>
@@ -180,6 +223,10 @@
                 <exclusion>
                     <artifactId>jersey-client</artifactId>
                     <groupId>org.glassfish.jersey.core</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>jersey-core</artifactId>
+                    <groupId>com.sun.jersey</groupId>
                 </exclusion>
                 <exclusion>
                     <artifactId>lz4</artifactId>
@@ -196,48 +243,92 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>2.13.17</version>
+        </dependency>
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-            <version>4.1.17.Final</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-            <version>3.9.9.Final</version>
         </dependency>
     </dependencies>
     <groupId>net.preibisch</groupId>
     <build>
         <finalName>RS-Fish</finalName>
         <plugins>
-
-            <!-- other Maven plugins ... -->
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.1.1</version>
-
+                <artifactId>maven-shade-plugin</artifactId>
                 <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <shadedClassifierName>with-dependencies</shadedClassifierName>
+                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                    <!-- Do not minimize for now to speed up packaging. -->
+                    <transformers combine.children="append">
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                            <resource>META-INF/json/org.janelia.saalfeldlab.n5.Compression$CompressionType</resource>
+                        </transformer>
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                            <resource>META-INF/json/org.janelia.saalfeldlab.n5.serialization.NameConfig$Name</resource>
+                        </transformer>
+                    </transformers>
+                    <!--<minimizeJar>true</minimizeJar> -->
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>Angle0.tif</exclude>
+                                <exclude>LICENSE</exclude>
+                                <exclude>LICENSE.txt</exclude>
+                                <exclude>META-INF/DEPENDENCIES</exclude>
+                                <exclude>META-INF/LICENSE</exclude>
+                                <exclude>META-INF/NOTICE</exclude>
+                                <exclude>META-INF/BSDL</exclude>
+                                <exclude>META-INF/COPYING</exclude>
+                                <exclude>META-INF/LEGAL</exclude>
+                                <exclude>META-INF/LICENSE.RUBY</exclude>
+                                <exclude>META-INF/json/org.scijava.plugin.Plugin</exclude>
+                                <exclude>META-INF/*.MF</exclude>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                                <exclude>META-INF/*.txt</exclude>
+                                <exclude>module-info.class</exclude>
+                                <exclude>plugins.config</exclude>
+                                <exclude>META-INF/versions/9/module-info.class</exclude>
+                                <exclude>META-INF/okio.kotlin_module</exclude>
+                                <exclude>META-INF/services/com.fasterxml.jackson.core.JsonFactory</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <!-- Additional configuration. -->
+                    <artifactSet>
+                        <excludes>
+                            <exclude>xpp3:xpp3</exclude>
+                        </excludes>
+                    </artifactSet>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.apache.commons.compress</pattern>
+                            <shadedPattern>org.janelia.saalfeldlab.org.apache.commons.compress</shadedPattern>
+                        </relocation>
+                        <!-- Protect newer gson version from the old one preloaded by spark -->
+                        <relocation>
+                            <pattern>com.google.gson</pattern>
+                            <shadedPattern>org.janelia.saalfeldlab.com.google.gson</shadedPattern>
+                        </relocation>
+                    </relocations>
                 </configuration>
-
+                <!-- binds by default to package phase -->
                 <executions>
                     <execution>
-                        <id>make-assembly</id>
                         <phase>package</phase>
                         <goals>
-                            <goal>single</goal>
+                            <goal>shade</goal>
                         </goals>
                     </execution>
                 </executions>
-
             </plugin>
         </plugins>
     </build>

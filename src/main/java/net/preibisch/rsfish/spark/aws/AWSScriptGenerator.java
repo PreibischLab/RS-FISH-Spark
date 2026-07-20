@@ -1,23 +1,22 @@
 package net.preibisch.rsfish.spark.aws;
 
 import benchmark.TextFileAccess;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.AmazonS3URI;
 import com.google.common.io.Files;
 import net.preibisch.rsfish.spark.aws.tools.S3Utils;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 import org.apache.commons.io.FilenameUtils;
 import picocli.CommandLine;
+import software.amazon.awssdk.services.s3.S3Uri;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -46,7 +45,7 @@ public class AWSScriptGenerator implements Callable<Void> {
     private String credPrivateKey;
 
     @CommandLine.Option(names = {"-reg", "--region"}, required = false, description = "S3 region Exmpl: us-east-1")
-    private String region = Regions.US_EAST_1.getName();
+    private String region = "us-east-1";
 
     @CommandLine.Option(names = {"-c", "--checkoutput"}, required = false, description = "Check existent outputs, to use if you have already processed some files 0 : false , 1 : true")
     private boolean checkOutput = false;
@@ -62,24 +61,22 @@ public class AWSScriptGenerator implements Callable<Void> {
 
     @Override
     public Void call() throws Exception {
-        AWSCredentials credentials = new BasicAWSCredentials(
-                credPublicKey, credPrivateKey
-        );
-        AmazonS3 s3 = AmazonS3ClientBuilder
-                .standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withRegion(Regions.fromName(region))
+        S3Client s3 = S3Client.builder()
+                .credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(credPublicKey, credPrivateKey)))
+                .region(Region.of(region))
                 .build();
 
-        AmazonS3URI inputUri = new AmazonS3URI(input);
+        S3Uri inputUri = s3.utilities().parseUri(URI.create(input));
 
-        ArrayList<AmazonS3URI> allFiles = S3Utils.getFilesList(s3, inputUri, exti);
+        ArrayList<S3Uri> allFiles = S3Utils.getFilesList(s3, inputUri, exti);
         System.out.println("Total raw size = " + allFiles.size());
         if (checkOutput)
-            allFiles = getDifference(allFiles, S3Utils.getFilesNamesOnly(s3, new AmazonS3URI(output)));
+            allFiles = getDifference(allFiles, S3Utils.getFilesNamesOnly(s3, s3.utilities().parseUri(URI.create(output))));
 
         if (checkGoodEmbroysFile)
             allFiles = getRightFiles(allFiles, new File(GoodEmbryosPath));
+
 
 
         File tmpFolder = Files.createTempDir();
@@ -106,34 +103,32 @@ public class AWSScriptGenerator implements Callable<Void> {
         return null;
     }
 
-    private ArrayList<AmazonS3URI> getRightFiles(ArrayList<AmazonS3URI> allFiles, File file) throws IOException {
+    private ArrayList<S3Uri> getRightFiles(ArrayList<S3Uri> allFiles, File file) throws IOException {
 
         List<String> rightFiles = new ArrayList<>();
         BufferedReader br = new BufferedReader(new FileReader(GoodEmbryosPath));
         String line = br.readLine();
-        while ((line = br.readLine()) != null)   //returns a Boolean value
+        while ((line = br.readLine()) != null)
         {
-            String elm = line.split(",")[1].replace("\"", "");    // use comma as separator
+            String elm = line.split(",")[1].replace("\"", "");
             rightFiles.add(elm);
         }
         allFiles.removeIf(n -> (
-                !rightFiles.contains(FilenameUtils.getName(n.getKey()).replaceFirst("(^c0_|c1_|c2_|c3_)", ""))
+                n.key().map(fn -> !rightFiles.contains(FilenameUtils.getName(fn).replaceFirst("(^c0_|c1_|c2_|c3_)", ""))).orElse(false)
         ));
         System.out.println("Size after getting only right files = " + allFiles.size());
         return allFiles;
-
-
     }
 
-    private ArrayList<AmazonS3URI> getDifference(ArrayList<AmazonS3URI> allFiles, ArrayList<String> filesList) {
+    private ArrayList<S3Uri> getDifference(ArrayList<S3Uri> allFiles, ArrayList<String> filesList) {
         allFiles.removeIf(n -> (
-                filesList.contains(FilenameUtils.getBaseName(n.getKey()))
+                n.key().map(fn -> filesList.contains(FilenameUtils.getBaseName(fn))).orElse(false)
         ));
         System.out.println("Size after clean = " + allFiles.size());
         return allFiles;
     }
 
-    private void generateScript(File outputFile, List<AmazonS3URI> allInputs) {
+    private void generateScript(File outputFile, List<S3Uri> allInputs) {
         PrintWriter out = TextFileAccess.openFileWrite(outputFile);
 
         out.print(taskp);

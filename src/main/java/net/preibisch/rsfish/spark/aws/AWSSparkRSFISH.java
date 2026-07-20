@@ -147,7 +147,7 @@ public class AWSSparkRSFISH implements Callable<Void> {
         System.out.println("Processing interval: " + Util.printInterval(interval));
 
         if (this.blockSizeString == null) {
-            if (att.getNumDimensions() == 2)
+            if ( att.getNumDimensions() == 2 )
                 this.blockSize = defaultBlockSize2d.clone();
             else
                 this.blockSize = defaultBlockSize3d.clone();

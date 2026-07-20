@@ -1,11 +1,9 @@
 package net.preibisch.rsfish.spark.aws.tools;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.io.Serializable;
 
@@ -14,32 +12,21 @@ public class S3Supplier implements Serializable {
     private final String credPrivateKey;
     private final String region;
 
-    public S3Supplier( String credPublicKey, String credPrivateKey, String region) {
+    public S3Supplier(String credPublicKey, String credPrivateKey, String region) {
         this.credPublicKey = credPublicKey;
         this.credPrivateKey = credPrivateKey;
         this.region = region;
     }
 
-    public AmazonS3 getS3() {
-        AWSCredentials credentials = new BasicAWSCredentials(
-                credPublicKey, credPrivateKey
-        );
-        return AmazonS3ClientBuilder
-                .standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withRegion(Regions.fromName(region))
-                .build();
+    public S3Client getS3() {
+        return S3Client.builder()
+            .credentialsProvider(StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(credPublicKey, credPrivateKey)))
+            .region(Region.of(region))
+            .build();
     }
 
-    public String getCredPublicKey() {
-        return credPublicKey;
-    }
-
-    public String getCredPrivateKey() {
-        return credPrivateKey;
-    }
-
-    public String getRegion() {
-        return region;
-    }
+    public String getCredPublicKey() { return credPublicKey; }
+    public String getCredPrivateKey() { return credPrivateKey; }
+    public String getRegion() { return region; }
 }

@@ -21,7 +21,7 @@ public class CSVUtils {
             out.print("1,1,");
 
             out.println(String.format(java.util.Locale.US, "%.4f", spot[spot.length - 1]));
-        }
+    }
 
         System.out.println(points.size() + " spots written to " + file);
         out.close();

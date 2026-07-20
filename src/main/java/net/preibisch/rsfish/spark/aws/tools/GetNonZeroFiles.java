@@ -1,16 +1,15 @@
 package net.preibisch.rsfish.spark.aws.tools;
 
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 import picocli.CommandLine;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -30,54 +29,49 @@ public class GetNonZeroFiles implements Callable<Void> {
     private String credPrivateKey;
 
     @CommandLine.Option(names = {"-reg", "--region"}, required = false, description = "S3 region Exmpl: us-east-1")
-    private String region = Regions.US_EAST_1.getName();
+    private String region = "us-east-1";
 
     public GetNonZeroFiles() {
     }
 
     @Override
     public Void call() throws Exception {
-        AWSCredentials credentials = new BasicAWSCredentials(
-                credPublicKey, credPrivateKey
-        );
-        AmazonS3 s3 = AmazonS3ClientBuilder
-                .standard()
-                .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                .withRegion(Regions.fromName(region))
+        S3Client s3 = S3Client.builder()
+                .credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(credPublicKey, credPrivateKey)))
+                .region(Region.of(region))
                 .build();
 
-        AmazonS3URI inputUri = new AmazonS3URI(input);
+        S3Uri inputUri = s3.utilities().parseUri(URI.create(input));
+        String bucket = inputUri.bucket().orElseThrow(() -> new IllegalArgumentException("Invalid input URI " + inputUri));
+        String key = inputUri.key().orElseThrow(() -> new IllegalArgumentException("Invalid input URI " + inputUri));
         int startWith = 0;
         int endWith = 0;
         int validSize = 0;
-//        List<S3ObjectSummary> allFiles = S3Utils.getFilesListSummary(s3, inputUri, exto);
-        List<S3ObjectSummary> allFiles = S3Utils.getList(s3,inputUri.getBucket());
+        List<S3Object> allFiles = S3Utils.getList(s3, bucket);
         System.out.println(allFiles.size());
-        List<S3ObjectSummary> filtered = new ArrayList<>();
-        for (S3ObjectSummary os : allFiles){
-            String name = os.getKey();
-            if(name.startsWith(inputUri.getKey())){
+        List<S3Object> filtered = new ArrayList<>();
+        for (S3Object os : allFiles) {
+            String name = os.key();
+            if (name.startsWith(key)) {
                 startWith++;
-                if(name.endsWith(exto)){
+                if (name.endsWith(exto)) {
                     endWith++;
-                    if(os.getSize()>0){
+                    if (os.size() > 0) {
                         validSize++;
-                        System.out.println(os.getKey()+" "+os.getSize());
+                        System.out.println(os.key() + " " + os.size());
                         filtered.add(os);
                     }
                 }
             }
         }
-        System.out.println("StartWith: "+startWith+" EndWith: "+endWith+" validSize: "+validSize);
+        System.out.println("StartWith: " + startWith + " EndWith: " + endWith + " validSize: " + validSize);
         System.out.println("Total: " + allFiles.size() + " Final: " + filtered.size());
 
         return null;
     }
 
     public static void main(String[] args) throws InterruptedException {
-
         new CommandLine(new GetNonZeroFiles()).execute(args);
     }
-
-
 }

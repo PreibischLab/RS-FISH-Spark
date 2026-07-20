@@ -57,7 +57,7 @@ public class Block implements Serializable
 				min.add( pos );
 				max.add( pos + Math.min( bs - 1, interval.max( d ) - pos ) );
 
-				pos += bs - 2; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG 
+				pos += bs - 2; // one overlap, starts at the max - 2 since the most outer pixels are not evaluated with DoG
 				++numBlocks[ d ];
 			}
 
@@ -92,7 +92,7 @@ public class Block implements Serializable
 	{
 		ArrayList< Block > blocks = splitIntoBlocks( new FinalInterval( new long[] { 19, -5 }, new long[] { 1000, 100 } ), new int[] { 100, 100 } );
 
-		for ( final Block b : blocks )
-			System.out.println( Util.printInterval( b.createInterval() ) );
+			for ( final Block b : blocks )
+				System.out.println( Util.printInterval( b.createInterval() ) );
 	}
 }

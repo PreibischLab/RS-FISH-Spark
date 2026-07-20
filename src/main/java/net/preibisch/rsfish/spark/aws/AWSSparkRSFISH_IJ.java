@@ -1,9 +1,8 @@
 package net.preibisch.rsfish.spark.aws;
 
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3URI;
 import com.google.common.io.Files;
+import software.amazon.awssdk.services.s3.S3Client;
 import gui.Radial_Symmetry;
 import gui.interactive.HelperFunctions;
 import ij.ImagePlus;
@@ -25,6 +24,7 @@ import scala.Tuple2;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -209,7 +209,7 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
             params.numThreads = 1;
 
 
-            AmazonS3 s3 = new S3Supplier(publicKey, privateKey, region).getS3();
+            S3Client s3 = new S3Supplier(publicKey, privateKey, region).getS3();
             File tmpFoler = Files.createTempDir();
 
             System.out.println("Tmp Folder :  " + tmpFoler.getAbsolutePath());
@@ -234,12 +234,10 @@ public class AWSSparkRSFISH_IJ implements Callable<Void> {
                 if (!localOutputFile.createNewFile())
                     System.out.println("Couldn't create empty output !");
                 else
-                    S3Utils.uploadFile(s3, localOutputFile, new AmazonS3URI(input._2()));
+                    S3Utils.uploadFile(s3, localOutputFile, s3.utilities().parseUri(URI.create(input._2)));
             } else {
-                S3Utils.uploadFile(s3, localOutputFile, new AmazonS3URI(input._2()));
+                S3Utils.uploadFile(s3, localOutputFile, s3.utilities().parseUri(URI.create(input._2)));
             }
-
-//            S3Utils.savePoints(s3, allPoints, input._2());
             clean(tmpFoler);
             taskTimeLog.done();
 
